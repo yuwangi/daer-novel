@@ -6,9 +6,10 @@ on:
   workflow_dispatch:
 
 env:
-  # REGISTRY: The container registry to push to (ghcr.io for GitHub Container Registry)
-  REGISTRY: ghcr.io
-  # IMAGE_NAME will be set in the workflow to ensure lowercase
+  REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
+  NAMESPACE: ${{ secrets.ALIYUN_NAMESPACE }}
+  IMAGE_NAME_BACKEND: daer-novel-backend
+  IMAGE_NAME_FRONTEND: daer-novel-frontend
 
 jobs:
   build-and-push:
@@ -21,70 +22,53 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Lowercase Image Name
-        run: |
-          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >>${GITHUB_ENV}
-        env:
-          GITHUB_REPOSITORY: '${{ github.repository }}'
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to the Container registry
+      - name: Log in to Aliyun ACR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
-          # github.actor: The username of the user who triggered the workflow
-          username: ${{ github.actor }}
-          # secrets.GITHUB_TOKEN: Automatically generated token for authentication
-          # If secrets.CR_PAT is provided, it will take precedence (solving 403 errors on first push)
-          password: ${{ secrets.CR_PAT || secrets.GITHUB_TOKEN }}
+          registry: ${{ secrets.ALIYUN_REGISTRY }}
+          username: ${{ secrets.ALIYUN_USERNAME }}
+          password: ${{ secrets.ALIYUN_PASSWORD }}
 
       - name: Extract metadata (tags, labels) for Backend
         id: meta-backend
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend
+          images: ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME_BACKEND }}
           tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=sha
             type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
 
-      - name: Build and push Backend Docker image
+      - name: Extract metadata (tags, labels) for Frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME_FRONTEND }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
+
+      - name: Build and push Backend image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: apps/backend/Dockerfile
           push: true
           tags: ${{ steps.meta-backend.outputs.tags }}
-          labels: |
-            ${{ steps.meta-backend.outputs.labels }}
-            org.opencontainers.image.source=${{ github.repositoryUrl }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Extract metadata (tags, labels) for Frontend
-        id: meta-frontend
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend
-          tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Frontend Docker image
+      - name: Build and push Frontend image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: apps/frontend/Dockerfile
           push: true
           tags: ${{ steps.meta-frontend.outputs.tags }}
-          labels: |
-            ${{ steps.meta-frontend.outputs.labels }}
-            org.opencontainers.image.source=${{ github.repositoryUrl }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -100,24 +84,31 @@ jobs:
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASSWORD }}
-          port: ${{ secrets.SERVER_PORT }} # optional, default 22
+          key: ${{ secrets.SERVER_SSH_KEY }}
           source: "docker-compose.prod.yml"
-          target: "~/www/wwwroot/novel.daerai.com/"
+          target: "~/daer-novel/"
 
       - name: Deploy to Server
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          ALIYUN_REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
+          ALIYUN_NAMESPACE: ${{ secrets.ALIYUN_NAMESPACE }}
+          ALIYUN_USERNAME: ${{ secrets.ALIYUN_USERNAME }}
+          ALIYUN_PASSWORD: ${{ secrets.ALIYUN_PASSWORD }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASSWORD }}
-          port: ${{ secrets.SERVER_PORT }} # optional, default 22
-          script_stop: true # stop script if any command fails
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          envs: ALIYUN_REGISTRY,ALIYUN_NAMESPACE,ALIYUN_USERNAME,ALIYUN_PASSWORD
           script: |
-            cd ~/www/wwwroot/novel.daerai.com/
+            cd ~/daer-novel
             
+            # Login to Aliyun ACR on the server
+            echo "$ALIYUN_PASSWORD" | docker login "$ALIYUN_REGISTRY" --username "$ALIYUN_USERNAME" --password-stdin
+
             # Export Variables for Docker Compose
-            export GITHUB_REPOSITORY_OWNER=${{ github.repository_owner }}
+            export ALIYUN_REGISTRY=$ALIYUN_REGISTRY
+            export ALIYUN_NAMESPACE=$ALIYUN_NAMESPACE
             
             # Pull latest images
             docker compose -f docker-compose.prod.yml pull
@@ -125,5 +116,5 @@ jobs:
             # Restart services
             docker compose -f docker-compose.prod.yml up -d
             
-            # Cleanup old images
+            # Cleanup unused images
             docker image prune -f
