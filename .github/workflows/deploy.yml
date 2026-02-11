@@ -8,8 +8,6 @@ on:
 env:
   # REGISTRY: The container registry to push to (ghcr.io for GitHub Container Registry)
   REGISTRY: ghcr.io
-  # REGISTRY: The container registry to push to (ghcr.io for GitHub Container Registry)
-  REGISTRY: ghcr.io
   # IMAGE_NAME will be set in the workflow to ensure lowercase
 
 jobs:
