@@ -32,7 +32,8 @@ jobs:
           # github.actor: The username of the user who triggered the workflow
           username: ${{ github.actor }}
           # secrets.GITHUB_TOKEN: Automatically generated token for authentication
-          password: ${{ secrets.GITHUB_TOKEN }}
+          # If secrets.CR_PAT is provided, it will take precedence (solving 403 errors on first push)
+          password: ${{ secrets.CR_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata (tags, labels) for Backend
         id: meta-backend
