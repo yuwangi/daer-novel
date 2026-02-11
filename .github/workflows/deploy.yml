@@ -119,7 +119,7 @@ jobs:
             # Export Variables for Docker Compose
             export GITHUB_REPOSITORY_OWNER=${{ github.repository_owner }}
             
-            # Pull latest images (using docker.1ms.run proxy as defined in compose file)
+            # Pull latest images
             docker compose -f docker-compose.prod.yml pull
             
             # Restart services
