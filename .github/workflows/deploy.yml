@@ -113,7 +113,8 @@ jobs:
             cd ~/www/wwwroot/novel.daerai.com/
             
             # Export Variables for Docker Compose
-            export GITHUB_REPOSITORY_OWNER=${{ github.repository_owner }}
+            # Ensure strictly lowercase owner name to match Docker image naming conventions
+            export GITHUB_REPOSITORY_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
             
             # Pull latest images (using docker.1ms.run proxy as defined in compose file)
             docker compose -f docker-compose.prod.yml pull
