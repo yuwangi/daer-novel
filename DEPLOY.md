@@ -3,8 +3,8 @@
 本指南说明如何使用 GitHub Actions 为 Daer Novel 设置自动部署。
 
 > [!NOTE]
-> 针对国内服务器网络环境，我们配置了 `docker.1ms.run` 代理来加速镜像拉取。
-> 部署流程会自动构建镜像推送到 GitHub，然后服务器通过代理地址拉取。
+> 针对国内服务器网络环境，我们使用了 **阿里云容器镜像服务 (ACR)**。
+> 部署流程会自动构建镜像推送到阿里云，然后服务器通过内网或公网高速拉取。
 
 ## 前置条件
 
@@ -67,14 +67,18 @@ sudo systemctl restart docker
 *   `env.REGISTRY`: 在 yml 中定义为 `ghcr.io` (GitHub 官方镜像库)
 
 ### 手动配置 (必须设置)
-添加以下密钥用于服务器连接：
+添加以下密钥用于服务器连接和阿里云镜像库：
 
 | 密钥名称 | 描述 |
 | :--- | :--- |
 | `SERVER_HOST` | 服务器公网 IP |
 | `SERVER_USER` | SSH 用户名 (如 `root`) |
 | `SERVER_PASSWORD` | SSH 密码 |
-| `SERVER_PORT` | SSH 端口 (可选，默认 22) |
+| `SERVER_PORT` | SSH 端口 (默认 22) |
+| `ALIYUN_REGISTRY` | 阿里云仓库地址 (`registry.cn-hangzhou.aliyuncs.com`) |
+| `ALIYUN_NAMESPACE` | 阿里云命名空间 (例如 `daer-novel`) |
+| `ALIYUN_USERNAME` | 阿里云登录用户名 |
+| `ALIYUN_PASSWORD` | 阿里云访问凭证密码 |
 
 ## 3. 环境变量配置
 
