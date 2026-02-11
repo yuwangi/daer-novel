@@ -1,0 +1,17 @@
+{
+  "auth": {
+    "registerSuccess": "Registration successful",
+    "loginSuccess": "Login successful",
+    "emailRegistered": "Email already registered",
+    "invalidCredentials": "Invalid email or password",
+    "notAuthenticated": "Not authenticated",
+    "userNotFound": "User not found",
+    "invalidToken": "Invalid token",
+    "serverError": "Internal server error, please try again later"
+  },
+  "validation": {
+    "invalidEmail": "Invalid email address",
+    "passwordLength": "Password must be at least 6 characters",
+    "required": "This field is required"
+  }
+}

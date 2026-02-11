@@ -1,0 +1,27 @@
+{
+  "version": "5",
+  "dialect": "pg",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1769782989061,
+      "tag": "0000_wonderful_toad_men",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1769791357580,
+      "tag": "0001_tricky_supernaut",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1770561355079,
+      "tag": "0002_mute_pretty_boy",
+      "breakpoints": true
+    }
+  ]
+}

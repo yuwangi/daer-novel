@@ -1,0 +1,31 @@
+{
+  "name": "daer-novel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI Novel Generation Platform - Multi-agent collaborative writing system",
+  "scripts": {
+    "dev": "concurrently \"pnpm run dev:backend\" \"pnpm run dev:frontend\"",
+    "dev:backend": "pnpm --filter backend dev",
+    "dev:frontend": "pnpm --filter frontend dev",
+    "build": "pnpm -r build",
+    "build:backend": "pnpm --filter backend build",
+    "build:frontend": "pnpm --filter frontend build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "db:migrate": "pnpm --filter backend migration:run",
+    "db:seed": "pnpm --filter backend seed",
+    "tauri:dev": "pnpm --filter frontend tauri dev",
+    "tauri:build": "pnpm --filter frontend tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.0",
+    "concurrently": "^8.2.2",
+    "prettier": "^3.2.4",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
