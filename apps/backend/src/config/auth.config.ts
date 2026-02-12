@@ -35,18 +35,37 @@ export const auth: any = betterAuth({
   },
 
   plugins: [
-    genericOAuth({ 
-      config: [ 
-        { 
-          providerId: "linuxdo", 
-          clientId: process.env.LINUXDO_CLIENT_ID!, 
-          clientSecret: process.env.LINUXDO_CLIENT_SECRET!, 
+    genericOAuth({
+      config: [
+        {
+          providerId: "linuxdo",
+          clientId: process.env.LINUXDO_CLIENT_ID!,
+          clientSecret: process.env.LINUXDO_CLIENT_SECRET!,
           authorizationUrl: "https://connect.linux.do/oauth2/authorize",
           tokenUrl: "https://connect.linux.do/oauth2/token",
           userInfoUrl: "https://connect.linux.do/api/user",
-          scopes: ["openid", "profile", "email", "username"],
-        }, 
-      ] 
+          scopes: ["openid", "profile", "email"],
+          getUserInfo: async (tokens) => {
+            const response = await fetch("https://connect.linux.do/api/user", {
+              headers: {
+                Authorization: `Bearer ${tokens.accessToken}`
+              }
+            });
+            const user: any = await response.json();
+            const now = new Date();
+            console.log('--------',user);
+            return {
+              id: String(user.id || user.sub),
+              name: user.name || user.username || user.login || 'LinuxDo User',
+              email: user.email,
+              emailVerified: true,
+              image: user.avatar_url || user.picture,
+              createdAt: now,
+              updatedAt: now,
+            };
+          }
+        },
+      ]
     }) 
   ],
   
