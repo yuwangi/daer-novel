@@ -25,6 +25,6 @@ export const signInWithGoogle = () => signIn.social({
   callbackURL: '/',
 });
 export const signInWithLinuxDo = () => signIn.social({ 
-  provider: 'linuxdo',
+  provider: 'linuxdo' as any,
   callbackURL: '/',
 });
