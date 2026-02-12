@@ -5,6 +5,15 @@ import { db } from '../database';
 import * as schema from '../database/schema';
 import { emailService } from '../services/email.service';
 
+// Validate LinuxDo OAuth environment variables
+const LINUXDO_CLIENT_ID = process.env.LINUXDO_CLIENT_ID;
+const LINUXDO_CLIENT_SECRET = process.env.LINUXDO_CLIENT_SECRET;
+
+if (!LINUXDO_CLIENT_ID || !LINUXDO_CLIENT_SECRET) {
+  console.warn('[Auth Config] ⚠️  LinuxDo OAuth is not fully configured. Missing CLIENT_ID or CLIENT_SECRET.');
+  console.warn('[Auth Config] LinuxDo authentication will not be available until these are set.');
+}
+
 export const auth: any = betterAuth({
   database: drizzleAdapter(db, {
     provider: 'pg',
@@ -35,38 +44,40 @@ export const auth: any = betterAuth({
   },
 
   plugins: [
-    genericOAuth({
-      config: [
-        {
-          providerId: "linuxdo",
-          clientId: process.env.LINUXDO_CLIENT_ID!,
-          clientSecret: process.env.LINUXDO_CLIENT_SECRET!,
-          authorizationUrl: "https://connect.linux.do/oauth2/authorize",
-          tokenUrl: "https://connect.linux.do/oauth2/token",
-          userInfoUrl: "https://connect.linux.do/api/user",
-          scopes: ["openid", "profile", "email"],
-          getUserInfo: async (tokens) => {
-            const response = await fetch("https://connect.linux.do/api/user", {
-              headers: {
-                Authorization: `Bearer ${tokens.accessToken}`
-              }
-            });
-            const user: any = await response.json();
-            const now = new Date();
-            console.log('--------',user);
-            return {
-              id: String(user.id || user.sub),
-              name: user.name || user.username || user.login || 'LinuxDo User',
-              email: user.email,
-              emailVerified: true,
-              image: user.avatar_url || user.picture,
-              createdAt: now,
-              updatedAt: now,
-            };
-          }
-        },
-      ]
-    }) 
+    ...(LINUXDO_CLIENT_ID && LINUXDO_CLIENT_SECRET ? [
+      genericOAuth({
+        config: [
+          {
+            providerId: "linuxdo",
+            clientId: LINUXDO_CLIENT_ID,
+            clientSecret: LINUXDO_CLIENT_SECRET,
+            authorizationUrl: "https://connect.linux.do/oauth2/authorize",
+            tokenUrl: "https://connect.linux.do/oauth2/token",
+            userInfoUrl: "https://connect.linux.do/api/user",
+            scopes: ["openid", "profile", "email"],
+            getUserInfo: async (tokens) => {
+              const response = await fetch("https://connect.linux.do/api/user", {
+                headers: {
+                  Authorization: `Bearer ${tokens.accessToken}`
+                }
+              });
+              const user: any = await response.json();
+              console.log('-------- LinuxDo User Info:', user);
+              const now = new Date();
+              return {
+                id: String(user.id || user.sub),
+                name: user.name || user.username || user.login || 'LinuxDo User',
+                email: user.email,
+                emailVerified: true,
+                image: user.avatar_url || user.picture,
+                createdAt: now,
+                updatedAt: now,
+              };
+            }
+          },
+        ]
+      })
+    ] : []),
   ],
   
   baseURL: process.env.AUTH_BASE_URL || process.env.BASE_URL || 'http://localhost:8002/api/auth',
@@ -124,3 +135,10 @@ export const auth: any = betterAuth({
 
 export type Session = typeof auth.$Infer.Session;
 export type User = typeof auth.$Infer.Session.user;
+
+// Log the available OAuth providers for debugging
+console.log('[Auth Config] Better Auth initialized');
+console.log('[Auth Config] Configured OAuth providers:', {
+  hasLinuxDo: !!(LINUXDO_CLIENT_ID && LINUXDO_CLIENT_SECRET),
+  linuxDoClientId: LINUXDO_CLIENT_ID ? `${LINUXDO_CLIENT_ID.substring(0, 8)}...` : 'NOT SET'
+});
