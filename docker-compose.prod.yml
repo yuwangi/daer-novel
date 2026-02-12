@@ -62,6 +62,9 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       LINUXDO_CLIENT_ID: ${LINUXDO_CLIENT_ID}
       LINUXDO_CLIENT_SECRET: ${LINUXDO_CLIENT_SECRET}
+      # Proxy (optional, for accessing external OAuth providers)
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
     volumes:
       - backend_uploads:/app/apps/backend/uploads
     depends_on:
