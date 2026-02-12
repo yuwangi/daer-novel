@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# 增加文件描述符限制，解决 EMFILE: too many open files 错误 (macOS)
-ulimit -n 10240
-
 echo "🚀 Daer Novel - 快速启动脚本"
+# 增加文件描述符限制，解决 EMFILE: too many open files 错误 (macOS)
+ulimit -n 65536 2>/dev/null || ulimit -n 10240
+echo "🔧 System File Limit: $(ulimit -n)"
 echo "================================"
 
 # 检查 Docker
