@@ -135,10 +135,17 @@ jobs:
             export ALIYUN_REGISTRY=$ALIYUN_REGISTRY
             export ALIYUN_NAMESPACE=$ALIYUN_NAMESPACE
             
+            # Stop services first
+            docker compose -f docker-compose.prod.yml down
+            
+            # Remove old images to force pull latest
+            docker rmi ${ALIYUN_REGISTRY}/${ALIYUN_NAMESPACE}/daer-novel-backend:latest || true
+            docker rmi ${ALIYUN_REGISTRY}/${ALIYUN_NAMESPACE}/daer-novel-frontend:latest || true
+            
             # Pull latest images
             docker compose -f docker-compose.prod.yml pull
             
-            # Restart services
+            # Start services
             docker compose -f docker-compose.prod.yml up -d
             
             # Cleanup unused images
