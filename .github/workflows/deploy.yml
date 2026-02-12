@@ -111,7 +111,15 @@ jobs:
             # Login to Aliyun ACR on the server
             echo "$ALIYUN_PASSWORD" | docker login "$ALIYUN_REGISTRY" --username "$ALIYUN_USERNAME" --password-stdin
 
-            # Export Variables for Docker Compose
+            # Update .env file with Registry info (so manual docker compose commands work)
+            if ! grep -q "ALIYUN_REGISTRY=" .env; then
+              echo "ALIYUN_REGISTRY=$ALIYUN_REGISTRY" >> .env
+            fi
+            if ! grep -q "ALIYUN_NAMESPACE=" .env; then
+              echo "ALIYUN_NAMESPACE=$ALIYUN_NAMESPACE" >> .env
+            fi
+            
+            # Export for current session just in case
             export ALIYUN_REGISTRY=$ALIYUN_REGISTRY
             export ALIYUN_NAMESPACE=$ALIYUN_NAMESPACE
             

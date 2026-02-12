@@ -23,18 +23,26 @@ const app: Application = express();
 const httpServer = createServer(app);
 // CORS configuration
 const allowedOrigins = process.env.CORS_ORIGIN 
-  ? process.env.CORS_ORIGIN.split(',') 
+  ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
   : ['http://localhost:8001', 'tauri://localhost', 'http://tauri.localhost'];
 
 const corsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    // allow requests with no origin (like mobile apps or curl requests)
+    // allow requests with no origin (like mobile apps, curl requests, or SSR)
     if (!origin) return callback(null, true);
+    
+    // Check for allowed origins or development mode
     if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+      return callback(null, true);
     }
+    
+    // If we're here, check if we want to be permissive for debugging
+    if (process.env.CORS_ALLOW_ALL === 'true') {
+        return callback(null, true);
+    }
+
+    console.warn(`Blocked by CORS: ${origin}`);
+    callback(new Error(`Not allowed by CORS: ${origin}`));
   },
   credentials: true,
 };

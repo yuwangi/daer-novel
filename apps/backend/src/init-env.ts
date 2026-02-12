@@ -1,13 +1,25 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Load .env from project root
+// Load .env files with priority: .env.local > .env
 // Path resolution: src/init-env.ts -> apps/backend/src -> apps/backend -> apps -> root
-const envPath = path.resolve(__dirname, '../../../.env');
+const rootDir = path.resolve(__dirname, '../../..');
+const envLocalPath = path.join(rootDir, '.env.local');
+const envPath = path.join(rootDir, '.env');
 
-dotenv.config({ path: envPath });
+// First load .env (base configuration)
+const envConfig = dotenv.config({ path: envPath });
+if (envConfig.error) {
+  console.warn('⚠️  .env file not found at:', envPath);
+} else {
+  console.log('🔌 Base environment loaded from:', envPath);
+}
 
-console.log('🔌 Environment variables initialized from:', envPath);
+// Then load .env.local (overrides)
+const localEnvConfig = dotenv.config({ path: envLocalPath, override: true });
+if (!localEnvConfig.error) {
+  console.log('🔌 Local environment overrides loaded from:', envLocalPath);
+}
 
 // Validate critical variables here to fail fast
 if (!process.env.JWT_SECRET) {

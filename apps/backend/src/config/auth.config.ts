@@ -54,12 +54,11 @@ export const auth: any = betterAuth({
   },
   
   secret: process.env.BETTER_AUTH_SECRET!,
-  
   trustedOrigins: [
     'http://localhost:8001',
     'tauri://localhost',
     'http://tauri.localhost',
-    ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : []),
+    ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(o => o.trim()) : []),
   ],
   
   advanced: {
