@@ -30,3 +30,15 @@ if (!process.env.JWT_SECRET) {
 if (process.env.GOOGLE_CLIENT_ID) {
   console.log('✅ Google Client ID loaded');
 }
+
+if (process.env.AUTH_BASE_URL) {
+  console.log(`✅ Auth Base URL loaded: ${process.env.AUTH_BASE_URL}`);
+} else {
+  console.warn('⚠️  AUTH_BASE_URL is not set! Auth may fail in production.');
+}
+
+if (process.env.LINUXDO_CLIENT_ID) {
+  console.log('✅ LinuxDo Client ID loaded');
+} else {
+  console.log('ℹ️  LinuxDo Client ID not set');
+}
