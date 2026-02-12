@@ -37,6 +37,7 @@
     "redis": "^4.6.12",
     "socket.io": "^4.6.1",
     "swagger-ui-express": "^5.0.0",
+    "undici": "^7.21.0",
     "winston": "^3.11.0",
     "zod": "^3.22.4"
   },

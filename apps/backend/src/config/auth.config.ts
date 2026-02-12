@@ -97,6 +97,9 @@ export const auth: any = betterAuth({
     async userCreated(data: any) {
       console.log(`[Auth] New user created: ${data.user.email}`);
     },
+    onError(context: any) {
+      console.error("[Auth] Error:", context.error);
+    },
   },
 });
 
