@@ -113,13 +113,23 @@ jobs:
             # Login to Aliyun ACR on the server
             echo "$ALIYUN_PASSWORD" | docker login "$ALIYUN_REGISTRY" --username "$ALIYUN_USERNAME" --password-stdin
 
-            # Update .env file with Registry info (so manual docker compose commands work)
-            if ! grep -q "ALIYUN_REGISTRY=" .env; then
-              echo "ALIYUN_REGISTRY=$ALIYUN_REGISTRY" >> .env
+            # Update .env file with Registry info ONLY if missing (server-managed mode)
+            if [ ! -f .env ]; then
+              touch .env
             fi
-            if ! grep -q "ALIYUN_NAMESPACE=" .env; then
-              echo "ALIYUN_NAMESPACE=$ALIYUN_NAMESPACE" >> .env
-            fi
+            
+            # Helper function to update or append env var
+            update_env() {
+              key=$1
+              val=$2
+              if ! grep -q "^$key=" .env; then
+                echo "$key=$val" >> .env
+              fi
+            }
+
+            update_env "ALIYUN_REGISTRY" "$ALIYUN_REGISTRY"
+            update_env "ALIYUN_NAMESPACE" "$ALIYUN_NAMESPACE"
+
             
             # Export for current session just in case
             export ALIYUN_REGISTRY=$ALIYUN_REGISTRY

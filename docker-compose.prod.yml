@@ -50,6 +50,14 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       CORS_ORIGIN: ${CORS_ORIGIN}
       CORS_ALLOW_ALL: ${CORS_ALLOW_ALL}
+      # Auth
+      JWT_SECRET: ${JWT_SECRET}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      AUTH_BASE_URL: ${AUTH_BASE_URL:-https://novel.daerai.com/api/auth}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
     volumes:
       - backend_uploads:/app/apps/backend/uploads
     depends_on:
