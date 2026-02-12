@@ -27,8 +27,8 @@ FROM nginx:alpine
 # Copy static files from builder
 COPY --from=builder /app/apps/frontend/out /usr/share/nginx/html
 
-# Copy custom Nginx config if needed (optional, using default for now)
-# COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy custom Nginx config
+COPY apps/frontend/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
