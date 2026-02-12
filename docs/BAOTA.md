@@ -60,6 +60,11 @@
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+
+        # 增加超时时间 (应对 AI 生成耗时较长的问题)
+        proxy_read_timeout 300;
+        proxy_connect_timeout 300;
+        proxy_send_timeout 300;
     }
 
     # Socket.IO 代理
