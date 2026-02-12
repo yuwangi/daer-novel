@@ -8,7 +8,9 @@ services:
     environment:
       POSTGRES_DB: daer_novel
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres123}
+    ports:
+      - "5789:5432"
     volumes:
       - daer_novel_pg16_data:/var/lib/postgresql/data
     healthcheck:
@@ -40,7 +42,7 @@ services:
       DATABASE_PORT: 5432
       DATABASE_NAME: daer_novel
       DATABASE_USER: postgres
-      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-postgres123}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       NODE_ENV: production
