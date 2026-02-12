@@ -7,7 +7,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { translateAuthError } from '@/lib/utils';
-import { signIn, signInWithGitHub, signInWithGoogle } from '@/lib/auth-client';
+import { signIn, signInWithGitHub, signInWithGoogle, signInWithLinuxDo } from '@/lib/auth-client';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -219,6 +219,17 @@ export default function LoginPage() {
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
               </svg>
               使用 Google 登录
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                signInWithLinuxDo();
+              }}
+              className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#ffc300] hover:bg-[#e6b000] text-black rounded-xl transition-all duration-200 shadow-md hover:shadow-lg border border-[#ffc300]"
+            >
+              <div className="w-5 h-5 flex items-center justify-center font-bold text-sm">L</div>
+              使用 LinuxDo 登录
             </button>
           </div>
 

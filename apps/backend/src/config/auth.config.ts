@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import { genericOAuth } from "better-auth/plugins"
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { db } from '../database';
 import * as schema from '../database/schema';
@@ -33,7 +34,20 @@ export const auth: any = betterAuth({
     sendOnSignUp: false,
   },
 
-  plugins: [],
+  plugins: [
+    genericOAuth({ 
+      config: [ 
+        { 
+          providerId: "linuxdo", 
+          clientId: process.env.LINUXDO_CLIENT_ID!, 
+          clientSecret: process.env.LINUXDO_CLIENT_SECRET!, 
+          authorizationEndpoint: "https://connect.linux.do/oauth2/authorize",
+          tokenEndpoint: "https://connect.linux.do/oauth2/token",
+          userEndpoint: "https://connect.linux.do/api/user",
+        }, 
+      ] 
+    }) 
+  ],
   
   baseURL: process.env.AUTH_BASE_URL || process.env.BASE_URL || 'http://localhost:8002/api/auth',
   

@@ -57,6 +57,9 @@ const PORT = process.env.BACKEND_PORT || 8002;
 // CORS must be first to handle preflight requests for ALL routes
 app.use(cors(corsOptions));
 
+// Trust proxy - Required for secure cookies behind Nginx
+app.set('trust proxy', 1);
+
 // Better-Auth handler - MUST be before body parsers but AFTER CORS
 import { auth } from './config/auth.config';
 import { toNodeHandler } from 'better-auth/node';

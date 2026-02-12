@@ -24,3 +24,7 @@ export const signInWithGoogle = () => signIn.social({
   provider: 'google',
   callbackURL: '/',
 });
+export const signInWithLinuxDo = () => signIn.social({ 
+  provider: 'linuxdo',
+  callbackURL: '/',
+});

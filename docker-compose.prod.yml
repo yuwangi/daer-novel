@@ -60,6 +60,8 @@ services:
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      LINUXDO_CLIENT_ID: ${LINUXDO_CLIENT_ID}
+      LINUXDO_CLIENT_SECRET: ${LINUXDO_CLIENT_SECRET}
     volumes:
       - backend_uploads:/app/apps/backend/uploads
     depends_on:
