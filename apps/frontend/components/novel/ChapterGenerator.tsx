@@ -59,7 +59,10 @@ export default function ChapterGenerator({ novelId, volumes, outline, onUpdate }
 
   useEffect(() => {
     // Setup WebSocket
-    const newSocket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002');
+    const socketUrl = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? window.location.origin : 'http://localhost:8002');
+    const newSocket = io(socketUrl, {
+      path: '/socket.io', // Ensure socket.io path matches backend
+    });
     setSocket(newSocket);
     
     // Listen for structure generation events

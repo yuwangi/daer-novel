@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8002');
 
 export const api = axios.create({
   baseURL: `${API_URL}/api`,
@@ -70,7 +70,7 @@ export const novelsAPI = {
     api.post(`/novels/${novelId}/outline/versions/${versionId}/rollback`),
 
   generateOutlineStream: (novelId: string, mode: string, existingOutline?: string) => {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002';
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8002');
     const url = new URL(`${API_URL}/api/novels/${novelId}/generate/outline/stream`);
     url.searchParams.set('mode', mode);
     if (existingOutline) {
