@@ -14,6 +14,10 @@ RUN npm install -g pnpm && pnpm install --frozen-lockfile=false
 # Copy source code
 COPY . .
 
+# Build args
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 # Build frontend (static export to apps/frontend/out)
 RUN pnpm --filter frontend build
 

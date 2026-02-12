@@ -71,6 +71,8 @@ jobs:
           labels: ${{ steps.meta-frontend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://novel.daerai.com
 
   deploy:
     runs-on: ubuntu-latest
