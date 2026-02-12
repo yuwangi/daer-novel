@@ -44,6 +44,7 @@ export const auth: any = betterAuth({
           authorizationUrl: "https://connect.linux.do/oauth2/authorize",
           tokenUrl: "https://connect.linux.do/oauth2/token",
           userInfoUrl: "https://connect.linux.do/api/user",
+          scopes: ["username", "name", "email"],
         }, 
       ] 
     }) 
