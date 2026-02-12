@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM node:18-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -12,7 +12,7 @@ COPY apps/backend/package.json ./apps/backend/
 COPY apps/frontend/package.json ./apps/frontend/
 
 
-# Install dependencies (Cache busted 2026-02-12-1100)
+# Install dependencies
 RUN pnpm install --frozen-lockfile=false
 
 # Copy source
@@ -22,7 +22,7 @@ COPY . .
 RUN pnpm --filter backend build
 
 # Stage 2: Production
-FROM node:18-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
