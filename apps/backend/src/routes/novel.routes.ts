@@ -293,6 +293,7 @@ const getAIConfig = async (userId: string) => {
       provider: 'openai' as const,
       model: 'gpt-3.5-turbo',
       apiKey: process.env.OPENAI_API_KEY || '',
+      baseUrl: process.env.OPENAI_BASE_URL || undefined,
     };
   }
 
@@ -309,18 +310,26 @@ const getAIConfig = async (userId: string) => {
 router.post('/suggestions/titles', async (req: AuthRequest, res, next) => {
   try {
     const { genre, style, background } = req.body;
+    console.log(`[AI] Title suggestion requested for genre: ${genre}, style: ${style}`);
+    
     const config = await getAIConfig(req.userId!);
+    console.log(`[AI] Using provider: ${config.provider}, model: ${config.model}, baseUrl: ${config.baseUrl || 'default'}`);
+    
     const provider = AIProviderFactory.create(config);
     const agent = new TitleAgent(provider);
     
+    const startTime = Date.now();
     const response = await agent.execute(
       { novel: { genre, style, background } },
       background || '未提供具体大纲，请根据类型和风格自由发挥'
     );
+    const duration = Date.now() - startTime;
+    console.log(`[AI] Response received in ${duration}ms`);
 
     const titles = response.content.split('\n').map(t => t.replace(/^\d+\.\s*/, '').trim()).filter(Boolean);
     res.json({ title: titles[0] || response.content.trim() });
-  } catch (error) {
+  } catch (error: any) {
+    console.error('[AI] Title suggestion error:', error.message || error);
     next(error);
   }
 });
