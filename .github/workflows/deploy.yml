@@ -101,6 +101,8 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           port: ${{ secrets.SERVER_PORT || 22 }}
+          command_timeout: 30m
+          timeout: 30m
           envs: ALIYUN_REGISTRY,ALIYUN_NAMESPACE,ALIYUN_USERNAME,ALIYUN_PASSWORD
           script: |
             cd ~/www/wwwroot/novel.daerai.com/

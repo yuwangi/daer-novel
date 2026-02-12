@@ -1,25 +1,44 @@
-FROM node:18-alpine
+# Stage 1: Build
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Copy root config files
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* .npmrc* ./
+# Install pnpm
+RUN npm install -g pnpm
 
-# Check if apps exist before copying to avoid errors if structure differs, 
-# but for this specific repo we know the structure.
+# Copy workspace configs
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* .npmrc* ./
 COPY apps/backend/package.json ./apps/backend/
 COPY apps/frontend/package.json ./apps/frontend/
 
-# Install dependencies for all workspaces
-RUN npm install -g pnpm && pnpm install --frozen-lockfile=false
+# Install dependencies
+RUN pnpm install --frozen-lockfile=false
 
-# Copy source code (respects .dockerignore)
+# Copy source
 COPY . .
 
 # Build backend
 RUN pnpm --filter backend build
 
+# Stage 2: Production
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install pnpm for running scripts
+RUN npm install -g pnpm
+
+# Copy root configs
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY apps/backend/package.json ./apps/backend/
+
+# Install only production dependencies for backend
+RUN pnpm install --prod --filter backend --frozen-lockfile=false
+
+# Copy built files from stage 1
+COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
+
 EXPOSE 8002
 
-# We stay in root WORKDIR /app, so we run commands from there
 CMD ["pnpm", "--filter", "backend", "start"]
+
