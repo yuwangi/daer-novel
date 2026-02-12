@@ -87,7 +87,7 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           port: ${{ secrets.SERVER_PORT || 22 }}
           source: "docker-compose.prod.yml"
-          target: "~/www/wwwroot/novel.daerai.com/"
+          target: "/www/wwwroot/novel.daerai.com/"
 
       - name: Deploy to Server
         uses: appleboy/ssh-action@v1.0.3
@@ -105,7 +105,8 @@ jobs:
           timeout: 30m
           envs: ALIYUN_REGISTRY,ALIYUN_NAMESPACE,ALIYUN_USERNAME,ALIYUN_PASSWORD
           script: |
-            cd ~/www/wwwroot/novel.daerai.com/
+            mkdir -p /www/wwwroot/novel.daerai.com/
+            cd /www/wwwroot/novel.daerai.com/
             
             # Login to Aliyun ACR on the server
             echo "$ALIYUN_PASSWORD" | docker login "$ALIYUN_REGISTRY" --username "$ALIYUN_USERNAME" --password-stdin
