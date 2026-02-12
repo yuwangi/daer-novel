@@ -63,12 +63,24 @@ export const auth: any = betterAuth({
   
   advanced: {
     generateId: () => crypto.randomUUID(), 
-    useSecureCookies: false, // Force disable secure cookies for localhost dev
+    useSecureCookies: process.env.NODE_ENV === 'production', 
     defaultCookieAttributes: {
-      sameSite: 'lax', // Allow cookies to be sent on top-level navigation (redirects)
-      secure: false,   // Ensure this matches useSecureCookies
-      httpOnly: true,  // Security best practice
-      path: '/',       // Available everywhere
+      sameSite: 'lax', 
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true,  
+      path: '/',       
+    },
+  },
+  
+  onEvent: {
+    async sessionCreated(data: any) {
+      console.log(`[Auth] Session created for user: ${data.session.userId}`);
+    },
+    async sessionDeleted(id: string) {
+      console.log(`[Auth] Session deleted: ${id}`);
+    },
+    async userCreated(data: any) {
+      console.log(`[Auth] New user created: ${data.user.email}`);
     },
   },
 });
