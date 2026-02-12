@@ -2,7 +2,7 @@ import { BaseAIProvider, AIMessage, AIResponse } from './providers';
 import { Novel, Character } from '../../database/schema';
 
 export interface AgentContext {
-  novel: Novel;
+  novel: Partial<Novel>;
   characters?: Character[];
   knowledgeBase?: string[];
   previousContent?: string;
@@ -139,11 +139,38 @@ export class TitleAgent extends BaseAgent {
   }
 
   protected buildUserPrompt(context: AgentContext, outline: string): string {
-    return `基于《${context.novel.title}》的以下大纲，生成5个候选书名：
+    return `基于《${context.novel.title || '未命名'}》的以下大纲，生成5个候选书名：
 
 ${outline}
 
 请直接输出5个书名，每行一个。`;
+  }
+}
+
+// Concept Expand Agent - 灵感扩写 (用于作品创建前)
+export class ConceptExpandAgent extends BaseAgent {
+  constructor(provider: BaseAIProvider) {
+    super(provider, 'ConceptExpandAgent');
+  }
+
+  protected buildSystemPrompt(context: AgentContext): string {
+    return `你是一位资深网文主编。你的任务是根据作者提供的初步构思，进行文学性的扩写和润色。
+
+小说类型：${context.novel.genre?.join('、') || '未设定'}
+风格标签：${context.novel.style?.join('、') || '未设定'}
+
+要求：
+1. 扩写内容要保持原意的核心，但增加细节和戏剧性
+2. 文笔要符合网文流行风格
+3. 增加一些悬念或钩子`;
+  }
+
+  protected buildUserPrompt(_context: AgentContext, background: string): string {
+    return `基于以下初步初步构想，扩写一段大约 300-500 字的小说简介/背景设定：
+
+${background}
+
+请直接输出扩写后的内容，不要包含任何其他说明文字。`;
   }
 }
 

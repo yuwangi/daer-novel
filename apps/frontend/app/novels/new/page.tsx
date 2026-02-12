@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { BookOpen, ArrowLeft, Sparkles, ChevronRight, Wand2, ArrowRight } from 'lucide-react';
+import { BookOpen, ArrowLeft, Sparkles, ChevronRight, Wand2, ArrowRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { novelsAPI } from '@/lib/api';
+import { toast } from 'sonner';
 
 const GENRES = ['玄幻', '奇幻', '都市', '仙侠', '科幻', '历史', '武侠', '游戏', '悬疑', '军事', '体育', '轻小说', '二次元', '现实', '短篇', '诸天无线'];
 const STYLES = ['爽文', '热血', '轻松', '虐心', '搞笑', '治愈', '黑暗', '无敌流', '系统流', '无限流', '种田文', '凡人流', '重生', '穿越', '单女主', '多女主', '变身', '位面', '位面流', '快穿', '团宠', '马甲', '团控'];
@@ -32,6 +33,55 @@ export default function NewNovelPage() {
       forbiddenRules: [] as string[],
     },
   });
+
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
+  const [isExpandingBackground, setIsExpandingBackground] = useState(false);
+
+  const handleGenerateTitle = async () => {
+    if (formData.background.length < 10 && formData.genre.length === 0) {
+      toast.error('请先提供一些选型或背景设定，以便 AI 更好地起名');
+      return;
+    }
+
+    setIsGeneratingTitle(true);
+    try {
+      const response = await novelsAPI.suggestTitles({
+        genre: formData.genre,
+        style: formData.style,
+        background: formData.background
+      });
+      setFormData({ ...formData, title: response.data.title });
+      toast.success('已生成 AI 推荐书名');
+    } catch (error) {
+      console.error('Failed to generate title:', error);
+      toast.error('生成书名失败，请重试');
+    } finally {
+      setIsGeneratingTitle(false);
+    }
+  };
+
+  const handleExpandBackground = async () => {
+    if (!formData.background || formData.background.length < 10) {
+      toast.error('请先输入至少 10 个字的初步构想');
+      return;
+    }
+
+    setIsExpandingBackground(true);
+    try {
+      const response = await novelsAPI.expandBackground({
+        genre: formData.genre,
+        style: formData.style,
+        background: formData.background
+      });
+      setFormData({ ...formData, background: response.data.background });
+      toast.success('背景设定已扩写');
+    } catch (error) {
+      console.error('Failed to expand background:', error);
+      toast.error('扩写失败，请重试');
+    } finally {
+      setIsExpandingBackground(false);
+    }
+  };
 
   const toggleSelection = (field: 'genre' | 'style', value: string) => {
     const current = formData[field];
@@ -132,8 +182,19 @@ export default function NewNovelPage() {
                       className="h-14 pl-4 text-lg bg-background/50 border-input/50 focus:border-primary/50 focus:bg-background transition-all"
                     />
                     <div className="absolute right-3 top-3">
-                      <Button size="sm" variant="ghost" className="h-8 text-xs text-primary bg-primary/10 hover:bg-primary/20">
-                        <Sparkles className="w-3 h-3 mr-1" /> AI取名
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        className="h-8 text-xs text-primary bg-primary/10 hover:bg-primary/20"
+                        onClick={handleGenerateTitle}
+                        disabled={isGeneratingTitle}
+                      >
+                        {isGeneratingTitle ? (
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-3 h-3 mr-1" />
+                        )}
+                        AI取名
                       </Button>
                     </div>
                   </div>
@@ -241,8 +302,19 @@ export default function NewNovelPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label className="text-base">背景设定与核心梗</Label>
-                    <Button size="sm" variant="ghost" className="text-primary hover:bg-primary/10">
-                      <Wand2 className="w-3 h-3 mr-1" /> AI 扩写
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      className="text-primary hover:bg-primary/10"
+                      onClick={handleExpandBackground}
+                      disabled={isExpandingBackground}
+                    >
+                      {isExpandingBackground ? (
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      ) : (
+                        <Wand2 className="w-3 h-3 mr-1" />
+                      )}
+                      AI 扩写
                     </Button>
                   </div>
                   <Textarea

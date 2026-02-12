@@ -78,6 +78,13 @@ export const novelsAPI = {
     }
     return new EventSource(url.toString(), { withCredentials: true });
   },
+
+  // AI Suggestions
+  suggestTitles: (data: { genre?: string[]; style?: string[]; background?: string }) =>
+    api.post('/novels/suggestions/titles', data),
+    
+  expandBackground: (data: { genre?: string[]; style?: string[]; background: string }) =>
+    api.post('/novels/suggestions/expand-background', data),
 };
 
 // Tasks API

@@ -4,6 +4,8 @@ import { eq, and } from 'drizzle-orm';
 import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { z } from 'zod';
+import { AIProviderFactory } from '../services/ai/providers';
+import { TitleAgent, ConceptExpandAgent } from '../services/ai/agents';
 
 const router: Router = Router();
 
@@ -279,4 +281,68 @@ router.post('/:id/outline/versions/:versionId/rollback', async (req: AuthRequest
   }
 });
 
+// --- AI Suggestion Routes ---
+
+const getAIConfig = async (userId: string) => {
+  const aiConfig = await db.query.aiConfigs.findFirst({
+    where: eq(schema.aiConfigs.userId, userId),
+  });
+
+  if (!aiConfig) {
+    return {
+      provider: 'openai' as const,
+      model: 'gpt-3.5-turbo',
+      apiKey: process.env.OPENAI_API_KEY || '',
+    };
+  }
+
+  return {
+    provider: aiConfig.provider as 'openai' | 'anthropic' | 'deepseek',
+    model: aiConfig.model,
+    apiKey: aiConfig.apiKey,
+    baseUrl: aiConfig.baseUrl || undefined,
+    temperature: 0.7,
+  };
+};
+
+// Suggest title
+router.post('/suggestions/titles', async (req: AuthRequest, res, next) => {
+  try {
+    const { genre, style, background } = req.body;
+    const config = await getAIConfig(req.userId!);
+    const provider = AIProviderFactory.create(config);
+    const agent = new TitleAgent(provider);
+    
+    const response = await agent.execute(
+      { novel: { genre, style, background } },
+      background || '未提供具体大纲，请根据类型和风格自由发挥'
+    );
+
+    const titles = response.content.split('\n').map(t => t.replace(/^\d+\.\s*/, '').trim()).filter(Boolean);
+    res.json({ title: titles[0] || response.content.trim() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Expand background
+router.post('/suggestions/expand-background', async (req: AuthRequest, res, next) => {
+  try {
+    const { genre, style, background } = req.body;
+    const config = await getAIConfig(req.userId!);
+    const provider = AIProviderFactory.create(config);
+    const agent = new ConceptExpandAgent(provider);
+
+    const response = await agent.execute(
+      { novel: { genre, style } },
+      background
+    );
+
+    res.json({ background: response.content.trim() });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
+
