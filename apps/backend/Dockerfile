@@ -11,7 +11,8 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* .npmrc* ./
 COPY apps/backend/package.json ./apps/backend/
 COPY apps/frontend/package.json ./apps/frontend/
 
-# Install dependencies
+
+# Install dependencies (Cache busted 2026-02-12-1100)
 RUN pnpm install --frozen-lockfile=false
 
 # Copy source
