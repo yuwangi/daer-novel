@@ -38,6 +38,7 @@ RUN pnpm install --prod --filter backend --frozen-lockfile=false
 
 # Copy built files from stage 1
 COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
+COPY --from=builder /app/apps/backend/drizzle ./apps/backend/drizzle
 
 EXPOSE 8002
 

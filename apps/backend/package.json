@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node dist/database/migrate.js && node dist/index.js",
     "start:dev": "tsx watch src/index.ts",
     "migration:generate": "drizzle-kit generate:pg",
     "migration:run": "tsx src/database/migrate.ts",
+    "migrate:prod": "node dist/database/migrate.js",
     "seed": "tsx src/database/seed.ts",
     "test": "jest",
     "test:watch": "jest --watch"
