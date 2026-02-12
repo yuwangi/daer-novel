@@ -64,7 +64,7 @@ app.set('trust proxy', 1);
 import { auth } from './config/auth.config';
 import { toNodeHandler } from 'better-auth/node';
 
-app.use('/api/auth', (req, res, next) => {
+app.use('/api/auth', (req, _res, next) => {
   console.log(`[Auth Debug] Incoming request: ${req.method} ${req.originalUrl || req.url}`);
   console.log(`[Auth Debug] Headers: ${JSON.stringify({
     host: req.headers.host,
