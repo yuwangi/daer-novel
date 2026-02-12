@@ -64,7 +64,26 @@ app.set('trust proxy', 1);
 import { auth } from './config/auth.config';
 import { toNodeHandler } from 'better-auth/node';
 
-app.all('/api/auth/*', (req, res) => { toNodeHandler(auth)(req, res); });
+app.use('/api/auth', (req, res, next) => {
+  console.log(`[Auth Debug] Incoming request: ${req.method} ${req.originalUrl || req.url}`);
+  console.log(`[Auth Debug] Headers: ${JSON.stringify({
+    host: req.headers.host,
+    'x-forwarded-proto': req.headers['x-forwarded-proto'],
+    'x-forwarded-host': req.headers['x-forwarded-host'],
+    origin: req.headers.origin
+  })}`);
+  
+  // Also log body if it exists (for POST requests)
+  if (req.method === 'POST') {
+    // Note: body might not be parsed yet if this is before body-parser
+    // but better-auth handles its own body if needed, or we might need to parse it
+  }
+  next();
+});
+
+app.all('/api/auth/*', (req, res) => { 
+  toNodeHandler(auth)(req, res); 
+});
 
 // Body parsers - AFTER Better-Auth
 app.use(express.json({ limit: '10mb' }));

@@ -24,7 +24,8 @@ export const signInWithGoogle = () => signIn.social({
   provider: 'google',
   callbackURL: '/',
 });
-export const signInWithLinuxDo = () => signIn.social({ 
-  provider: 'linuxdo' as any,
+// @ts-ignore
+export const signInWithLinuxDo = () => authClient.signIn.oauth2({ 
+  providerId: 'linuxdo',
   callbackURL: '/',
 });
