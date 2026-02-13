@@ -1,4 +1,10 @@
 import './init-env'; // Must be the first import to ensure env vars are loaded before other modules
+import dns from 'node:dns';
+
+// Force IPv4 first to avoid "other side closed" errors with GitHub/OAuth providers on some networks
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
 
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
