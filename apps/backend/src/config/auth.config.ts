@@ -104,7 +104,7 @@ export const auth: any = betterAuth({
                      "User-Agent": "Daer-Novel-App" 
                    }
                 });
-                const emails: any[] = await emailRes.json();
+                const emails = await emailRes.json() as any[];
                 const primary = emails.find((e: any) => e.primary && e.verified);
                 if (primary) email = primary.email;
                 else if (emails.length > 0) email = emails[0].email;
