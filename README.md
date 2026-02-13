@@ -66,7 +66,6 @@
 
 ---
 
-<details>
 <summary><h2>📸 项目预览</h2></summary>
 
 
@@ -88,7 +87,6 @@
 
 ![章节创作](screenshots/index7.png)
 
-</details>
 
 ---
 
