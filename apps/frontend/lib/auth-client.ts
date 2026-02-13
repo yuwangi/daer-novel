@@ -20,8 +20,8 @@ export const {
 } = authClient;
 
 // OAuth helpers
-export const signInWithGitHub = () => signIn.social({ 
-  provider: 'github',
+export const signInWithGitHub = () => (authClient.signIn as any).oauth2({ 
+  providerId: 'github',
   callbackURL: '/',
 });
 export const signInWithGoogle = () => signIn.social({ 

@@ -75,6 +75,54 @@ export const auth: any = betterAuth({
               };
             }
           },
+          // Convert GitHub to Generic OAuth to bypass PKCE issues
+          {
+            providerId: "github",
+            clientId: process.env.GITHUB_CLIENT_ID!,
+            clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+            authorizationUrl: "https://github.com/login/oauth/authorize",
+            tokenUrl: "https://github.com/login/oauth/access_token",
+            userInfoUrl: "https://api.github.com/user",
+            scopes: ["user:email"],
+            pkce: false, // Explicitly disable PKCE to avoid code_verifier errors
+            getUserInfo: async (tokens) => {
+              // 1. Get User Profile
+              const userRes = await fetch("https://api.github.com/user", {
+                headers: { 
+                  Authorization: `Bearer ${tokens.accessToken}`,
+                  "User-Agent": "Daer-Novel-App" 
+                }
+              });
+              const user: any = await userRes.json();
+              
+              // 2. Get User Email (if not public)
+              let email = user.email;
+              if (!email) {
+                const emailRes = await fetch("https://api.github.com/user/emails", {
+                   headers: { 
+                     Authorization: `Bearer ${tokens.accessToken}`,
+                     "User-Agent": "Daer-Novel-App" 
+                   }
+                });
+                const emails: any[] = await emailRes.json();
+                const primary = emails.find((e: any) => e.primary && e.verified);
+                if (primary) email = primary.email;
+                else if (emails.length > 0) email = emails[0].email;
+              }
+
+              console.log('-------- GitHub User Info:', { id: user.id, login: user.login, email });
+              const now = new Date();
+              return {
+                id: String(user.id),
+                name: user.name || user.login,
+                email: email,
+                emailVerified: true,
+                image: user.avatar_url,
+                createdAt: now,
+                updatedAt: now,
+              };
+            }
+          }
         ]
       })
     ] : []),
@@ -83,10 +131,10 @@ export const auth: any = betterAuth({
   baseURL: process.env.AUTH_BASE_URL || process.env.BASE_URL || 'http://localhost:8002/api/auth',
   
   socialProviders: {
-    github: {
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-    },
+    // github: { // Moved to genericOAuth
+    //   clientId: process.env.GITHUB_CLIENT_ID!,
+    //   clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+    // },
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
