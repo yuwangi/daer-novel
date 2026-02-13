@@ -77,7 +77,7 @@ app.use('/api/auth', (req, _res, next) => {
     'x-forwarded-proto': req.headers['x-forwarded-proto'],
     'x-forwarded-host': req.headers['x-forwarded-host'],
     origin: req.headers.origin,
-    cookie: req.headers.cookie ? 'PRESENT (hidden)' : 'MISSING' 
+    cookieKeys: req.headers.cookie ? Object.keys(require('cookie').parse(req.headers.cookie)).join(', ') : 'NONE'
   })}`);
   
   // Also log body if it exists (for POST requests)

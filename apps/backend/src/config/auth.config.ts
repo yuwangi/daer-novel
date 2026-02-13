@@ -108,10 +108,10 @@ export const auth: any = betterAuth({
   
   advanced: {
     generateId: () => crypto.randomUUID(), 
-    useSecureCookies: process.env.NODE_ENV === 'production', 
+    useSecureCookies: false, // process.env.NODE_ENV === 'production', // DEBUG: Temporarily disable secure cookies
     defaultCookieAttributes: {
       sameSite: 'lax', 
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // process.env.NODE_ENV === 'production', // DEBUG
       httpOnly: true,  
       path: '/',       
     },
