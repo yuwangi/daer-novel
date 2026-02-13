@@ -88,3 +88,9 @@ volumes:
   daer_novel_pg16_data:
   redis_data:
   backend_uploads:
+
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "1450"
