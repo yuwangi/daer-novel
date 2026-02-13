@@ -27,7 +27,7 @@ async function seed() {
       provider: 'openai',
       model: 'gpt-5.2-chat',
       apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
-      baseUrl: 'https://api.openai.com/v1',
+      baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
       parameters: {
         temperature: 0.7,
         maxTokens: 4000,

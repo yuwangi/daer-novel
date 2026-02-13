@@ -151,6 +151,7 @@ export class OutlineService extends BaseService {
         provider: 'openai' as const,
         model: 'gpt-3.5-turbo',
         apiKey: process.env.OPENAI_API_KEY || '',
+        baseUrl: process.env.OPENAI_BASE_URL || undefined,
       };
 
     if (!config.apiKey) {

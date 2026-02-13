@@ -48,6 +48,7 @@ services:
       NODE_ENV: production
       # Add other env vars here (OPENAI_API_KEY etc.)
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       CORS_ORIGIN: ${CORS_ORIGIN}
