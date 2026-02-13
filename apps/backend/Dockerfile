@@ -24,6 +24,8 @@ RUN pnpm --filter backend build
 # Stage 2: Production
 FROM node:22-alpine
 
+LABEL org.opencontainers.image.source="https://github.com/yuwangi/daer-novel"
+
 WORKDIR /app
 
 # Install pnpm for running scripts

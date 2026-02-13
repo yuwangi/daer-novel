@@ -24,6 +24,8 @@ RUN pnpm --filter frontend build
 # Stage 2: Serve with Nginx
 FROM nginx:alpine
 
+LABEL org.opencontainers.image.source="https://github.com/yuwangi/daer-novel"
+
 # Copy static files from builder
 COPY --from=builder /app/apps/frontend/out /usr/share/nginx/html
 
