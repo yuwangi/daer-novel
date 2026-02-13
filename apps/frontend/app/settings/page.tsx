@@ -23,7 +23,7 @@ export default function SettingsPage() {
 
   const [formData, setFormData] = useState({
     provider: 'openai',
-    model: 'gpt-4',
+    model: 'gpt-5.2-chat',
     apiKey: '',
     baseUrl: 'https://api.openai.com/v1',
     temperature: 0.7,
@@ -122,7 +122,7 @@ export default function SettingsPage() {
     setEditingId(null);
     setFormData({
       provider: 'openai',
-      model: 'gpt-4',
+      model: 'gpt-5.2-chat',
       apiKey: '',
       baseUrl: 'https://api.openai.com/v1',
       temperature: 0.7,
@@ -300,7 +300,7 @@ export default function SettingsPage() {
                                <Input
                                  value={formData.model}
                                  onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                                 placeholder="e.g. gpt-4-turbo"
+                                 placeholder="e.g. gpt-5.2"
                                />
                             </div>
                          </div>

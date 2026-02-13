@@ -25,7 +25,7 @@ async function seed() {
     await db.insert(schema.aiConfigs).values({
       userId: user.id,
       provider: 'openai',
-      model: 'gpt-4',
+      model: 'gpt-5.2-chat',
       apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
       baseUrl: 'https://api.openai.com/v1',
       parameters: {

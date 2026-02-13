@@ -105,7 +105,7 @@ export function startWorker(io: Server) {
              id: 'env-config',
              userId: novel.userId,
              provider: process.env.AI_PROVIDER || 'openai',
-             model: process.env.AI_MODEL || 'gpt-4o',
+             model: process.env.AI_MODEL || 'gpt-5.2-chat',
              apiKey: process.env.AI_API_KEY,
              baseUrl: process.env.AI_BASE_URL || null,
              parameters: {
