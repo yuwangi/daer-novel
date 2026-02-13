@@ -65,6 +65,8 @@ services:
       # Proxy (optional, for accessing external OAuth providers)
       HTTPS_PROXY: ${HTTPS_PROXY:-}
       HTTP_PROXY: ${HTTP_PROXY:-}
+      # Prefer IPv4 to avoid "other side closed" errors on some servers with unstable IPv6
+      NODE_OPTIONS: "--dns-result-order=ipv4first"
     volumes:
       - backend_uploads:/app/apps/backend/uploads
     depends_on:
