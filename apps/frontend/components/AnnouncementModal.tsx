@@ -134,14 +134,6 @@ export function AnnouncementModal() {
              </div>
           </div>
 
-          {/* Tip Section */}
-          <div className="bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-xl p-4 flex items-start gap-3">
-             <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-             <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
-                提示：选择“今日内不再展示”当天不再显示，选择“永不再展示”将永久隐藏此公告。您之后的个人资料页或帮助文档中也可以找到群组信息。
-             </p>
-          </div>
-
           {/* Footer Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 pt-4 border-t border-gray-100 dark:border-gray-800">
              <Button 
