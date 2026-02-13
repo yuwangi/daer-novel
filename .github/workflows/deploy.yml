@@ -32,11 +32,21 @@ jobs:
           username: ${{ secrets.ALIYUN_USERNAME }}
           password: ${{ secrets.ALIYUN_PASSWORD }}
 
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Extract metadata (tags, labels) for Backend
         id: meta-backend
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME_BACKEND }}
+          # Push to both Aliyun and GitHub Packages
+          images: |
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME_BACKEND }}
+            ghcr.io/${{ github.repository }}/backend
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha
@@ -45,7 +55,10 @@ jobs:
         id: meta-frontend
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME_FRONTEND }}
+          # Push to both Aliyun and GitHub Packages
+          images: |
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME_FRONTEND }}
+            ghcr.io/${{ github.repository }}/frontend
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha
