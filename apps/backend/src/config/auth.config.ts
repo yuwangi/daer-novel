@@ -131,6 +131,9 @@ export const auth: any = betterAuth({
       console.error("[Auth] Error:", context.error);
     },
   },
+  
+  // Important for proxies: Trust the host header
+  trustHost: true,
 });
 
 export type Session = typeof auth.$Infer.Session;
