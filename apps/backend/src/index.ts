@@ -63,8 +63,8 @@ const PORT = process.env.BACKEND_PORT || 8002;
 // CORS must be first to handle preflight requests for ALL routes
 app.use(cors(corsOptions));
 
-// Trust proxy - Required for secure cookies behind Nginx
-app.set('trust proxy', 1);
+// Trust proxy - Required for secure cookies behind Nginx/Cloudflare
+app.set('trust proxy', true); // Trust all proxies to ensure protocol is correctly identified as HTTPS
 
 // Better-Auth handler - MUST be before body parsers but AFTER CORS
 import { auth } from './config/auth.config';
@@ -76,7 +76,8 @@ app.use('/api/auth', (req, _res, next) => {
     host: req.headers.host,
     'x-forwarded-proto': req.headers['x-forwarded-proto'],
     'x-forwarded-host': req.headers['x-forwarded-host'],
-    origin: req.headers.origin
+    origin: req.headers.origin,
+    cookie: req.headers.cookie ? 'PRESENT (hidden)' : 'MISSING' 
   })}`);
   
   // Also log body if it exists (for POST requests)
