@@ -14,7 +14,8 @@ import {
   Library, 
   Settings, 
   PenTool,
-  Sparkles
+  Sparkles,
+  BarChart3
 } from 'lucide-react';
 
 const sidebarItems = [
@@ -27,6 +28,11 @@ const sidebarItems = [
     title: '藏书阁',
     href: '/novels',
     icon: BookOpen,
+  },
+  {
+    title: '写作统计',
+    href: '/stats',
+    icon: BarChart3,
   },
   {
     title: '知识库',

@@ -1,5 +1,8 @@
 'use client';
 
+// Note: In a pure 'use client' file, Next.js handles this via Suspense which is wrapping ChapterEditor
+
+
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
@@ -8,14 +11,18 @@ import { tasksAPI, novelsAPI } from '@/lib/api';
 import { 
   Loader2, Save, ArrowLeft, CheckCircle, AlertCircle, 
   Sparkles, Settings, Type, PanelRightOpen, PanelRightClose, 
-  BookOpen, Home, ChevronRight, Menu 
+  BookOpen, Home, ChevronRight, Menu, Maximize2, Minimize2, History, UserCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ChatPanel } from '@/components/editor/ChatPanel';
 import { ChapterListSidebar } from '@/components/editor/ChapterListSidebar';
+import { SelectionMenu } from '@/components/editor/SelectionMenu';
+import { HistoryPanel } from '@/components/editor/HistoryPanel';
+import { getSelectionCoordinates } from '@/lib/textarea-utils';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -68,6 +75,23 @@ function ChapterEditor() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const chapterId = searchParams.get('id') as string;
+  
+  // Focus Mode State (Moved to top)
+  const [isFocusMode, setIsFocusMode] = useState(false);
+
+  // Toggle Focus Mode
+  const toggleFocusMode = () => {
+    setIsFocusMode(!isFocusMode);
+    // Auto-close panels when entering focus mode
+    if (!isFocusMode) {
+        setIsLeftSidebarOpen(false);
+        setIsRightPanelOpen(false);
+    } else {
+        setIsLeftSidebarOpen(true);
+        setIsRightPanelOpen(true);
+    }
+  };
+
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [novel, setNovel] = useState<Novel | null>(null);
   const [content, setContent] = useState('');
@@ -81,8 +105,9 @@ function ChapterEditor() {
   const [lastSavedContent, setLastSavedContent] = useState('');
   
   // Side Panel State
-  const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
+  const [isRightPanelOpen, setIsRightPanelOpen] = useState(false);
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   // Settings State
   const { theme, setTheme } = useTheme();
@@ -92,14 +117,36 @@ function ChapterEditor() {
   // Modals
   const [isWorkOutlineOpen, setIsWorkOutlineOpen] = useState(false);
   const [isChapterOutlineOpen, setIsChapterOutlineOpen] = useState(false);
+  
+  // OOC Check State
+  const [isOocChecking, setIsOocChecking] = useState(false);
+  const [oocResult, setOocResult] = useState<{ passed: boolean; issues: string[]; suggestions?: string[] } | null>(null);
+  const [isOocModalOpen, setIsOocModalOpen] = useState(false);
 
   const contentRef = useRef(content);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const prevContentLengthRef = useRef<number>(0); // Track previous content length for daily word counting
+  // Chat Panel Ref
+  const chatPanelRef = useRef<{ sendMessage: (msg: string) => void }>(null);
 
   // Keep ref in sync
   useEffect(() => {
     contentRef.current = content;
+  }, [content]);
+
+  // Track daily word count: accumulate typed chars into localStorage
+  useEffect(() => {
+    const len = content.length;
+    const prev = prevContentLengthRef.current;
+    const delta = len - prev;
+    if (delta > 0 && prev > 0) {
+      const today = new Date().toISOString().split('T')[0];
+      const key = `writing-words-${today}`;
+      const existing = parseInt(localStorage.getItem(key) || '0', 10);
+      localStorage.setItem(key, String(existing + delta));
+    }
+    prevContentLengthRef.current = len;
   }, [content]);
 
   // Load Settings
@@ -114,6 +161,60 @@ function ChapterEditor() {
   const updateSetting = (key: string, value: string, setter: (val: any) => void) => {
     setter(value);
     localStorage.setItem(key, value);
+  };
+
+  // Handlers for Selection Menu & Auto Expand
+  const handleRewrite = (text: string, prompt?: string) => {
+    if (!isRightPanelOpen) setIsRightPanelOpen(true);
+    // Determine prompt based on input
+    const finalPrompt = prompt 
+      ? `请根据以下要求改写这段文字：\n\n【要求】：${prompt}\n\n【原文】：${text}`
+      : `请润色这段文字，使其更加生动流畅：\n\n${text}`;
+    
+    // Slight delay to ensure panel is open
+    setTimeout(() => {
+      chatPanelRef.current?.sendMessage(finalPrompt);
+    }, 100);
+  };
+
+  const handleExpand = (text: string) => {
+    if (!isRightPanelOpen) setIsRightPanelOpen(true);
+    const prompt = `请扩写这段文字，增加细节描写和心理活动，使其篇幅更长：\n\n${text}`;
+    setTimeout(() => {
+      chatPanelRef.current?.sendMessage(prompt);
+    }, 100);
+  };
+
+  const handleAutoExpand = () => {
+    if (!isRightPanelOpen) setIsRightPanelOpen(true);
+    // Get last paragraph or last few chars as context
+    const context = content.slice(-500); 
+    const prompt = `请接着上文继续扩写，保持风格一致，推动剧情发展：\n\n上文片段：\n${context}`;
+    setTimeout(() => {
+        chatPanelRef.current?.sendMessage(prompt);
+    }, 100);
+  };
+
+  const handleOocCheck = async () => {
+    if (!content.trim()) {
+      toast.warning('正文为空，无法检测');
+      return;
+    }
+    
+    setIsOocChecking(true);
+    setOocResult(null);
+    try {
+      // Check the latest written content (e.g., last 2000 chars) for performance, or full content
+      const textToCheck = content.length > 3000 ? content.slice(-3000) : content;
+      const res = await tasksAPI.checkOoc(chapterId, textToCheck);
+      setOocResult(res.data);
+      setIsOocModalOpen(true);
+    } catch (error: any) {
+      console.error('OOC Check failed:', error);
+      toast.error(error.message || '角色一致性检测失败');
+    } finally {
+      setIsOocChecking(false);
+    }
   };
 
   // Fetch Chapter and Novel
@@ -207,6 +308,30 @@ function ChapterEditor() {
     };
   }, [content, lastSavedContent, saveContent]);
 
+  // Typewriter Scrolling in Focus Mode
+  useEffect(() => {
+    if (isFocusMode && textareaRef.current) {
+      const textarea = textareaRef.current;
+      const { selectionStart } = textarea;
+      
+      // Use requestAnimationFrame to ensure we scroll after render
+      requestAnimationFrame(() => {
+          const coords = getSelectionCoordinates(textarea, selectionStart);
+          const lineHeight = coords.height;
+          const textareaHeight = textarea.clientHeight;
+          
+          // Calculate desired scroll top to center the cursor
+          // Target: cursorTop at 40% of screen height (slightly above center)
+          const targetScrollTop = coords.top - (textareaHeight * 0.4) + (lineHeight / 2);
+          
+          textarea.scrollTo({
+              top: Math.max(0, targetScrollTop),
+              behavior: 'smooth' 
+          });
+      });
+    }
+  }, [content, isFocusMode]);
+
   // Shortcuts & Indentation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -286,14 +411,28 @@ function ChapterEditor() {
         }))
     })) || [];
 
+
   return (
-    <div className="flex h-screen overflow-hidden bg-background text-foreground">
+    <div className="flex h-screen overflow-hidden bg-background text-foreground relative">
       
+      {/* Focus Mode Exit Button (Floating) */}
+      {isFocusMode && (
+         <Button 
+            variant="ghost" 
+            size="icon" 
+            className="fixed top-4 right-4 z-50 opacity-20 hover:opacity-100 transition-opacity"
+            onClick={toggleFocusMode}
+            title="退出专注模式"
+         >
+            <Maximize2 className="w-5 h-5" />
+         </Button>
+      )}
+
       {/* 1. Left Sidebar (Chapter List) - 260px */}
       <div 
         className={cn(
-          "border-r border-border bg-background/50 backdrop-blur-sm transition-all duration-300 flex flex-col relative z-20",
-          isLeftSidebarOpen ? "w-[260px]" : "w-0 opacity-0 overflow-hidden"
+          "border-r border-border bg-background/50 backdrop-blur-sm transition-all duration-500 flex flex-col relative z-20",
+          isLeftSidebarOpen && !isFocusMode ? "w-[260px]" : "w-0 opacity-0 overflow-hidden"
         )}
       >
         {novel && (
@@ -317,8 +456,13 @@ function ChapterEditor() {
       {/* 2. Center (Editor) - Flex 1 */}
       <div className="flex-1 flex flex-col h-full relative transition-all duration-300 min-w-0 bg-background">
         
-        {/* Header */}
-        <header className="h-14 border-b border-border bg-background/80 backdrop-blur-sm flex items-center justify-between px-4 sticky top-0 z-10 shrink-0">
+        {/* Header - Hidden in Focus Mode */}
+        <header 
+            className={cn(
+                "h-14 border-b border-border bg-background/80 backdrop-blur-sm flex items-center justify-between px-4 sticky top-0 z-10 shrink-0 transition-all duration-500",
+                isFocusMode ? "h-0 opacity-0 overflow-hidden border-0" : ""
+            )}
+        >
           
           {/* Left: Breadcrumbs */}
           <div className="flex items-center gap-2 text-sm text-muted-foreground overflow-hidden">
@@ -354,51 +498,145 @@ function ChapterEditor() {
           {/* Right: Actions */}
           <div className="flex items-center gap-1.5">
             
-            {/* Outline Dialogs */}
-            <div className="flex bg-muted/30 rounded-lg p-0.5 border border-border/50 mr-2">
-               <Dialog open={isWorkOutlineOpen} onOpenChange={setIsWorkOutlineOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-7 text-xs px-2.5">
-                      作品大纲
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                    <DialogHeader>
-                      <DialogTitle>作品大纲</DialogTitle>
-                    </DialogHeader>
-                    <div className="min-h-[200px] text-sm text-foreground/80 whitespace-pre-wrap leading-relaxed">
-                       {workOutline || '暂无作品大纲內容'}
+            {/* Outline Dialogs (Consolidated) */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-7 text-xs px-2.5 mr-2 gap-1">
+                   <BookOpen className="w-3.5 h-3.5" />
+                   <span className="hidden sm:inline">大纲</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel>大纲查看</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <Dialog open={isWorkOutlineOpen} onOpenChange={setIsWorkOutlineOpen}>
+                   <DialogTrigger asChild>
+                     <div className="w-full cursor-pointer px-2 py-1.5 text-sm hover:bg-accent rounded-sm">
+                       作品大纲
+                     </div>
+                   </DialogTrigger>
+                   <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                     <DialogHeader>
+                       <DialogTitle>作品大纲</DialogTitle>
+                     </DialogHeader>
+                     <div className="min-h-[200px] text-sm text-foreground/80 whitespace-pre-wrap leading-relaxed">
+                        {workOutline || '暂无作品大纲內容'}
+                     </div>
+                   </DialogContent>
+                </Dialog>
+                <Dialog open={isChapterOutlineOpen} onOpenChange={setIsChapterOutlineOpen}>
+                   <DialogTrigger asChild>
+                     <div className="w-full cursor-pointer px-2 py-1.5 text-sm hover:bg-accent rounded-sm mt-1">
+                       本章大纲
+                     </div>
+                   </DialogTrigger>
+                    <DialogContent className="max-w-xl">
+                     <DialogHeader>
+                       <DialogTitle>本章大纲</DialogTitle>
+                     </DialogHeader>
+                     <div className="min-h-[200px] text-sm whitespace-pre-wrap leading-relaxed">
+                        {outline || '暂无章节大纲'}
+                     </div>
+                   </DialogContent>
+                 </Dialog>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            
+            {/* AI Assistant Menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-7 text-xs px-2.5 gap-1.5 border-primary/20 text-primary hover:bg-primary/5 mr-2"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">AI 辅助</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuItem onClick={handleAutoExpand} className="gap-2 cursor-pointer">
+                  <Sparkles className="w-3.5 h-3.5 text-primary" />
+                  一键扩写
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={(e) => {
+                    e.preventDefault(); // Prevent closing immediately so we can show loading if needed
+                    handleOocCheck();
+                  }} 
+                  disabled={isOocChecking}
+                  className="gap-2 cursor-pointer"
+                >
+                  {isOocChecking ? <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" /> : <UserCheck className="w-3.5 h-3.5 text-purple-600" />}
+                  OOC 检测
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* OOC Modal definition (kept separate from dropdown) */}
+            <Dialog open={isOocModalOpen} onOpenChange={setIsOocModalOpen}>
+              <DialogContent className="max-w-xl">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <UserCheck className="w-5 h-5 text-purple-500" />
+                    角色一致性 (OOC) 检测报告
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="py-4">
+                  {oocResult ? (
+                    <div className="space-y-4">
+                      <div className={cn("p-4 border rounded-md font-medium text-sm flex items-center gap-2", 
+                        oocResult.passed ? "bg-green-500/10 border-green-500/30 text-green-700" : "bg-red-500/10 border-red-500/30 text-red-700"
+                      )}>
+                        {oocResult.passed ? (
+                          <><CheckCircle className="w-4 h-4" /> 恭喜！当前片段未发现明显的角色崩坏 (OOC)。</>
+                        ) : (
+                          <><AlertCircle className="w-4 h-4" /> 警告：发现可能存在的 OOC 行为！</>
+                        )}
+                      </div>
+                      
+                      {!oocResult.passed && oocResult.issues && oocResult.issues.length > 0 && (
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" /> 存在的问题：</h4>
+                          <ul className="list-disc pl-5 space-y-1 text-sm bg-accent/50 p-3 rounded-md">
+                            {oocResult.issues.map((issue, i) => (
+                              <li key={i}>{issue}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
-                  </DialogContent>
-               </Dialog>
-               <div className="w-px bg-border/50 my-1" />
-               <Dialog open={isChapterOutlineOpen} onOpenChange={setIsChapterOutlineOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-7 text-xs px-2.5">
-                      章节大纲
-                    </Button>
-                  </DialogTrigger>
-                   <DialogContent className="max-w-xl">
-                    <DialogHeader>
-                      <DialogTitle>本章大纲</DialogTitle>
-                    </DialogHeader>
-                    <div className="min-h-[200px] text-sm whitespace-pre-wrap leading-relaxed">
-                       {outline || '暂无章节大纲'}
-                    </div>
-                  </DialogContent>
-               </Dialog>
+                  ) : (
+                    <div className="flex justify-center py-6 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin" /></div>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Save Status (Compact) */}
+            <div className="flex items-center gap-1.5 text-xs px-2 border-r border-border/50 mr-1 text-muted-foreground">
+               <span className="hidden sm:inline">字数: {content.length.toLocaleString()}</span>
+               <span className="sm:hidden">{content.length}</span>
+               
+               <div className="w-px h-3 bg-border mx-1" />
+               
+               {saveStatus === 'saved' && <span title="已保存"><CheckCircle className="w-3 h-3 text-muted-foreground" /></span>}
+               {saveStatus === 'saving' && <span title="保存中"><Loader2 className="w-3 h-3 animate-spin text-blue-500" /></span>}
+               {saveStatus === 'unsaved' && <span className="w-2 h-2 rounded-full bg-amber-500" title="未保存" />}
+               {saveStatus === 'error' && <span title="保存失败"><AlertCircle className="w-3 h-3 text-red-500" /></span>}
             </div>
 
-            {/* Save Status */}
-            <div className="flex items-center gap-1.5 text-xs px-2 border-r border-border/50 mr-1">
-              {saveStatus === 'saved' && <CheckCircle className="w-3 h-3 text-muted-foreground" />}
-              {saveStatus === 'saving' && <Loader2 className="w-3 h-3 animate-spin text-blue-500" />}
-              {saveStatus === 'unsaved' && <span className="w-2 h-2 rounded-full bg-amber-500" />}
-              {saveStatus === 'error' && <AlertCircle className="w-3 h-3 text-red-500" />}
-              <span className="text-muted-foreground min-w-[3rem] text-right whitespace-nowrap">
-                {content.length.toLocaleString()} 字
-              </span>
-            </div>
+            {/* Focus Mode Toggle */}
+            <Button 
+               variant="ghost" 
+               size="icon" 
+               className="h-8 w-8 hover:bg-accent"
+               onClick={toggleFocusMode}
+               title="进入专注模式"
+            >
+               <Maximize2 className="w-4 h-4 opacity-70" />
+            </Button>
 
             {/* Settings */}
             <DropdownMenu>
@@ -458,13 +696,24 @@ function ChapterEditor() {
               size="icon" 
               onClick={() => setIsRightPanelOpen(!isRightPanelOpen)}
               className="h-8 w-8 hover:bg-accent"
-              title={isRightPanelOpen ? "收起面板" : "展开面板"}
+              title={isRightPanelOpen ? "收起AI助手" : "展开AI助手"}
             >
               {isRightPanelOpen ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
             </Button>
+
+            {/* History Toggle */}
+            <Button
+              variant={isHistoryOpen ? "secondary" : "ghost"}
+              size="icon"
+              onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+              className="h-8 w-8 hover:bg-accent"
+              title="版本历史"
+            >
+              <History className="w-4 h-4" />
+            </Button>
             
             {/* Main Save Button */}
-            <Button size="sm" onClick={() => saveContent(true)} disabled={isSaving} className="h-8 ml-1">
+            <Button size="sm" onClick={() => saveContent(true)} disabled={isSaving} className="h-8 ml-1 px-2.5">
               {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               <span className="ml-1.5 hidden sm:inline">保存</span>
             </Button>
@@ -473,23 +722,61 @@ function ChapterEditor() {
 
         {/* Editor Area */}
         <main className="flex-1 overflow-hidden relative">
-          <textarea
-            ref={textareaRef}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            onKeyDown={handleTextareaKeyDown}
-            placeholder="开始你的创作..."
-            className={getTextareaClass()}
-            spellCheck={false}
+          
+          {/* Floating Exit Button for Focus Mode */}
+          {isFocusMode && (
+             <div className="fixed top-4 right-4 z-50 flex items-center gap-2 opacity-30 hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-background border border-border/50 rounded-full shadow-sm text-muted-foreground mr-2">
+                   <span>{content.length.toLocaleString()} 字</span>
+                   {saveStatus === 'saved' && <CheckCircle className="w-3 h-3 text-muted-foreground" />}
+                   {saveStatus === 'saving' && <Loader2 className="w-3 h-3 animate-spin text-blue-500" />}
+                   {saveStatus === 'unsaved' && <span className="w-2 h-2 rounded-full bg-amber-500" />}
+                   {saveStatus === 'error' && <AlertCircle className="w-3 h-3 text-red-500" />}
+                </div>
+                <Button 
+                   variant="outline" 
+                   size="icon" 
+                   className="h-9 w-9 bg-background border-border/50 shadow-sm rounded-full"
+                   onClick={toggleFocusMode}
+                   title="退出专注模式"
+                >
+                   <Minimize2 className="w-4 h-4" />
+                </Button>
+             </div>
+          )}
+
+          <SelectionMenu 
+            textareaRef={textareaRef}
+            onRewrite={handleRewrite} 
+            onExpand={handleExpand} 
           />
+          <div className={cn(
+             "h-full w-full mx-auto px-8 py-10 overflow-hidden transition-all duration-500 flex flex-col",
+             isFocusMode ? "max-w-3xl pt-24" : "max-w-4xl"
+          )}>
+            {isFocusMode && (
+              <h1 className={cn("text-3xl font-bold mb-10 text-center opacity-80 shrink-0", fontFamily === 'serif' ? "font-serif" : "font-sans")}>
+                {chapter?.title}
+              </h1>
+            )}
+            <textarea
+              ref={textareaRef}
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              onKeyDown={handleTextareaKeyDown}
+              placeholder="开始你的创作..."
+              className={getTextareaClass()}
+              spellCheck={false}
+            />
+          </div>
         </main>
       </div>
 
       {/* 3. Right Panel (AI Assistant) - 350px */}
       <div 
         className={cn(
-          "h-full border-l border-border bg-background transition-all duration-300 ease-in-out flex flex-col z-20",
-          isRightPanelOpen ? "w-[350px]" : "w-0 opacity-0 overflow-hidden"
+          "h-full border-l border-border bg-background transition-all duration-500 ease-in-out flex flex-col z-20",
+          isRightPanelOpen && !isFocusMode ? "w-[350px]" : "w-0 opacity-0 overflow-hidden"
         )}
       >
         <div className="flex-1 flex flex-col h-full overflow-hidden">
@@ -506,6 +793,7 @@ function ChapterEditor() {
           
           <div className="flex-1 overflow-hidden flex flex-col min-h-0">
              <ChatPanel 
+                 ref={chatPanelRef}
                  novelId={chapter.novelId} 
                  currentContent={content} 
                  className="h-full border-0 shadow-none bg-transparent"
@@ -515,6 +803,24 @@ function ChapterEditor() {
         </div>
       </div>
 
+      {/* 4. History Panel (Version History) - 300px */}
+      <div
+        className={cn(
+          "h-full border-l border-border bg-background transition-all duration-500 ease-in-out flex flex-col z-20",
+          isHistoryOpen && !isFocusMode ? "w-[300px]" : "w-0 opacity-0 overflow-hidden"
+        )}
+      >
+        <HistoryPanel
+          chapterId={chapter.id}
+          currentContent={content}
+          onRestore={(restoredContent) => {
+            setContent(restoredContent);
+            setLastSavedContent(restoredContent);
+            setSaveStatus('saved');
+          }}
+          className="h-full"
+        />
+      </div>
     </div>
   );
 }

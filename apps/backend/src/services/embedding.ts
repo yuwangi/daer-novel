@@ -85,3 +85,58 @@ export async function searchSimilarDocuments(
 
   return results;
 }
+
+/**
+ * Retrieve relevant knowledge from the database for a specific novel
+ */
+import { db, schema } from '../database';
+import { inArray, eq } from 'drizzle-orm';
+
+export async function retrieveRelevantKnowledge(
+  query: string,
+  novelId: string,
+  limit = 3,
+  similarityThreshold = 0.5
+): Promise<string[]> {
+  try {
+    // 1. Get all Knowledge Bases for this novel
+    const knowledgeBases = await db.query.knowledgeBases.findMany({
+      where: eq(schema.knowledgeBases.novelId, novelId),
+    });
+
+    if (knowledgeBases.length === 0) return [];
+
+    const kbIds = knowledgeBases.map((kb) => kb.id);
+
+    // 2. Get all Documents in these Knowledge Bases
+    const documents = await db.query.knowledgeDocuments.findMany({
+      where: inArray(schema.knowledgeDocuments.knowledgeBaseId, kbIds),
+    });
+
+    if (documents.length === 0) return [];
+
+    // 3. Prepare documents with parsed embeddings for search
+    const docsWithEmbeddings = documents.map((doc) => ({
+      id: doc.id,
+      content: doc.content,
+      embedding: doc.embedding ? JSON.parse(doc.embedding as string) : undefined,
+    }));
+
+    // Filter out docs without valid embeddings
+    const searchableDocs = docsWithEmbeddings.filter(d => Boolean(d.embedding && d.embedding.length > 0));
+    
+    if (searchableDocs.length === 0) return [];
+
+    // 4. Perform vector search
+    const searchResults = await searchSimilarDocuments(query, searchableDocs, limit);
+    
+    // 5. Filter by threshold and map to extracted content
+    return searchResults
+      .filter(res => res.similarity >= similarityThreshold)
+      .map(res => res.content);
+
+  } catch (error) {
+    console.error('Failed to retrieve relevant knowledge:', error);
+    return []; // Return empty context on failure rather than breaking the AI flow
+  }
+}

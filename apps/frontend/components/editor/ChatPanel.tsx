@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Send, Bot, User, X } from 'lucide-react';
+import { Loader2, Send, Bot, User, X, Copy } from 'lucide-react';
 import { chatAPI } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
+import { toast } from 'sonner';
 
 interface Message {
   id: string;
@@ -23,7 +24,11 @@ interface ChatPanelProps {
   showHeader?: boolean;
 }
 
-export function ChatPanel({ novelId, currentContent, onClose, className, showHeader = true }: ChatPanelProps) {
+export interface ChatPanelRef {
+  sendMessage: (message: string) => void;
+}
+
+export const ChatPanel = forwardRef<ChatPanelRef, ChatPanelProps>(({ novelId, currentContent, onClose, className, showHeader = true }, ref) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -36,17 +41,16 @@ export function ChatPanel({ novelId, currentContent, onClose, className, showHea
     }
   }, [messages, isLoading]);
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || isLoading) return;
 
     const userMsg: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: input,
+      content: text,
     };
 
     setMessages(prev => [...prev, userMsg]);
-    setInput('');
     setIsLoading(true);
 
     const assistantMsgId = (Date.now() + 1).toString();
@@ -64,13 +68,32 @@ export function ChatPanel({ novelId, currentContent, onClose, className, showHea
       });
     } catch (error) {
       console.error('Chat error:', error);
+      let errorMessage = '❌ 发送失败，请稍后重试。';
+      
+      if (error instanceof Error) {
+         if (error.message.includes('AI Configuration not found') || error.message.includes('AI settings')) {
+             errorMessage = '❌ AI 配置缺失。请前往 [系统设置](/settings) 里的“AI 模型配置”进行设置。';
+         } else {
+             errorMessage = `❌ ${error.message}`;
+         }
+      }
+
       setMessages(prev => [
         ...prev, 
-        { id: Date.now().toString(), role: 'assistant', content: '❌ 发送失败，请稍后重试。' }
+        { id: Date.now().toString(), role: 'assistant', content: errorMessage }
       ]);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  useImperativeHandle(ref, () => ({
+    sendMessage
+  }));
+
+  const handleSend = () => {
+    sendMessage(input);
+    setInput('');
   };
 
   return (
@@ -115,15 +138,31 @@ export function ChatPanel({ novelId, currentContent, onClose, className, showHea
                 {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
               </div>
               <div className={cn(
-                "p-3 rounded-lg text-sm leading-relaxed shadow-sm",
+                "p-3 rounded-lg text-sm leading-relaxed shadow-sm relative group",
                 msg.role === 'user' 
                   ? "bg-primary-600 text-white" 
                   : "bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200"
               )}>
                 {msg.role === 'assistant' ? (
-                   <ReactMarkdown className="prose prose-sm dark:prose-invert max-w-none">
-                     {msg.content}
-                   </ReactMarkdown>
+                   <>
+                     <ReactMarkdown className="prose prose-sm dark:prose-invert max-w-none mb-4">
+                       {msg.content}
+                     </ReactMarkdown>
+                     <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 bg-background/50 hover:bg-background shadow-sm"
+                          onClick={() => {
+                            navigator.clipboard.writeText(msg.content);
+                            toast.success('已复制到剪贴板');
+                          }}
+                          title="复制内容"
+                        >
+                          <Copy className="w-3 h-3 text-muted-foreground" />
+                        </Button>
+                     </div>
+                   </>
                 ) : (
                   msg.content
                 )}
@@ -162,4 +201,6 @@ export function ChatPanel({ novelId, currentContent, onClose, className, showHea
       </div>
     </div>
   );
-}
+});
+
+ChatPanel.displayName = 'ChatPanel';

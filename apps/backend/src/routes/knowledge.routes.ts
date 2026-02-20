@@ -6,6 +6,8 @@ import { generateEmbeddings, searchSimilarDocuments } from '../services/embeddin
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { cosService } from '../services/cos.service';
+import { logger } from '../utils/logger';
 
 const router: Router = Router();
 
@@ -193,18 +195,34 @@ router.delete('/:novelId/:id', async (req: AuthRequest, res, next) => {
         console.error('Failed to generate embeddings during upload:', err);
       }
 
+      const localPath = req.file.path;
+      const key = `knowledge/${req.file.filename}`;
+      
+      let filePath = localPath;
+      try {
+        // Upload to COS
+        filePath = await cosService.uploadFile(localPath, key);
+        
+        // Delete local temporary file
+        fs.unlink(localPath, (err) => {
+          if (err) logger.error('Failed to delete local document temp file:', err);
+        });
+      } catch (err) {
+        logger.error('Failed to upload knowledge document to COS:', err);
+      }
+
       const [document] = await db
         .insert(schema.knowledgeDocuments)
         .values({
           knowledgeBaseId: req.params.knowledgeBaseId,
           title: title || req.file.originalname,
           content: documentContent,
-          filePath: req.file.path,
+          filePath: filePath,
           fileType: path.extname(req.file.originalname),
           embedding: embedding ? JSON.stringify(embedding) : null,
         } as any)
         .returning();
-
+ 
       res.json(document);
     } catch (error) {
       next(error);
@@ -235,10 +253,14 @@ router.delete(
         where: eq(schema.knowledgeDocuments.id, req.params.documentId),
       });
 
-      if (document?.filePath && fs.existsSync(document.filePath)) {
-        fs.unlinkSync(document.filePath);
+      if (document?.filePath) {
+        if (document.filePath.startsWith('http')) {
+          // If it's a COS URL, we could delete it from COS if needed
+          // For now just deleting from DB entry
+        } else if (fs.existsSync(document.filePath)) {
+          fs.unlinkSync(document.filePath);
+        }
       }
-
       await db
         .delete(schema.knowledgeDocuments)
         .where(eq(schema.knowledgeDocuments.id, req.params.documentId));

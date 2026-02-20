@@ -133,7 +133,7 @@ export default function HomePage() {
                               </span>
                             ))}
                           </div>
-                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed h-8">
+                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed ">
                             {novel.background || '暂无简介...'}
                           </p>
                         </div>

@@ -7,6 +7,7 @@ if (dns.setDefaultResultOrder) {
 }
 
 import express, { Application, Request, Response } from 'express';
+import path from 'path';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -24,6 +25,7 @@ import knowledgeRoutes from './routes/knowledge.routes';
 import aiConfigRoutes from './routes/aiConfig.routes';
 import taskRoutes from './routes/task.routes';
 import chatRoutes from './routes/chat.routes';
+import sandboxRoutes from './routes/sandbox.routes';
 
 const app: Application = express();
 const httpServer = createServer(app);
@@ -99,6 +101,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // i18n middleware - MUST be before routes
 app.use(i18nMiddleware);
 
+// Static files
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 // Request logging
 app.use((req, _res, next) => {
   logger.info(`${req.method} ${req.path}`);
@@ -124,6 +129,7 @@ app.use('/api-docs', swaggerUi.serve as any, swaggerUi.setup({
 app.use('/api/novels', authMiddleware, novelRoutes);
 app.use('/api/novels', authMiddleware, taskRoutes); // Task routes for novel generation
 app.use('/api/chapters', authMiddleware, chapterRoutes);
+app.use('/api', authMiddleware, sandboxRoutes); // Sandbox routes for plot branching
 app.use('/api/knowledge', authMiddleware, knowledgeRoutes);
 app.use('/api/ai-config', authMiddleware, aiConfigRoutes);
 app.use('/api/tasks', authMiddleware, taskRoutes); // Task status routes

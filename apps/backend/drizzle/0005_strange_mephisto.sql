@@ -1,0 +1,1 @@
+ALTER TABLE "novels" ADD COLUMN "writing_style_rules" text;

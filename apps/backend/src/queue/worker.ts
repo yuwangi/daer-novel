@@ -12,6 +12,7 @@ import {
   ContentAgent,
   ConsistencyAgent,
 } from '../services/ai/agents';
+import { retrieveRelevantKnowledge } from '../services/embedding';
 import { logger } from '../utils/logger';
 import { Server } from 'socket.io';
 
@@ -136,9 +137,10 @@ export function startWorker(io: Server) {
 
         // Execute based on task type
         switch (type) {
-          case 'outline':
+          case 'outline': {
             agent = new OutlineAgent(provider);
-            result = await agent.execute({ novel, characters });
+            const kbOutline = await retrieveRelevantKnowledge(novel.title || '大纲', novelId, 5, 0.3);
+            result = await agent.execute({ novel, characters, knowledgeBase: kbOutline });
             // Save outline
             await db.insert(schema.outlineVersions).values({
               novelId,
@@ -152,15 +154,18 @@ export function startWorker(io: Server) {
               .set({ currentOutlineVersion: 1 })
               .where(eq(schema.novels.id, novelId));
             break;
+          }
 
-          case 'title':
+          case 'title': {
             agent = new TitleAgent(provider);
             result = await agent.execute({ novel, characters }, input.outline);
             break;
+          }
 
-          case 'chapter_planning':
+          case 'chapter_planning': {
             agent = new ChapterPlanningAgent(provider);
-            result = await agent.execute({ novel, characters }, input);
+            const kbPlanning = await retrieveRelevantKnowledge('剧情规划 大纲', novelId, 5, 0.3);
+            result = await agent.execute({ novel, characters, knowledgeBase: kbPlanning }, input);
             // Parse and save volumes/chapters
             // Parse and save volumes/chapters
             const planning = JSON.parse(cleanJson(result.content));
@@ -186,14 +191,16 @@ export function startWorker(io: Server) {
               }
             }
             break;
+          }
 
-          case 'chapter_outline':
+          case 'chapter_outline': {
             agent = new ChapterOutlineAgent(provider);
             const chapter = await db.query.chapters.findFirst({
               where: eq(schema.chapters.id, chapterId!),
             });
+            const kbChapterOutline = await retrieveRelevantKnowledge(chapter?.title || '章节大纲', novelId, 3, 0.4);
             result = await agent.execute(
-              { novel, characters },
+              { novel, characters, knowledgeBase: kbChapterOutline },
               { order: chapter?.order, title: chapter?.title, summary: chapter?.outline }
             );
             // Update chapter outline
@@ -202,19 +209,22 @@ export function startWorker(io: Server) {
               .set({ outline: result.content })
               .where(eq(schema.chapters.id, chapterId!));
             break;
+          }
 
-          case 'chapter_detail':
+          case 'chapter_detail': {
             agent = new ChapterDetailAgent(provider);
             const chapterForDetail = await db.query.chapters.findFirst({
               where: eq(schema.chapters.id, chapterId!),
             });
-            result = await agent.execute({ novel, characters }, chapterForDetail?.outline);
+            const kbChapterDetail = await retrieveRelevantKnowledge(chapterForDetail?.outline || chapterForDetail?.title || '', novelId, 3, 0.4);
+            result = await agent.execute({ novel, characters, knowledgeBase: kbChapterDetail }, chapterForDetail?.outline);
             // Update chapter detail outline
             await db
               .update(schema.chapters)
               .set({ detailOutline: result.content })
               .where(eq(schema.chapters.id, chapterId!));
             break;
+          }
 
           case 'content': {
             agent = new ContentAgent(provider);
@@ -229,8 +239,9 @@ export function startWorker(io: Server) {
             
             // Stream content generation
             let generatedContent = '';
+            const kbContent = await retrieveRelevantKnowledge(targetOutline || chapterForContent?.title || '', novelId, 5, 0.3);
             result = await agent.executeStream(
-              { novel, characters },
+              { novel, characters, knowledgeBase: kbContent },
               { outline: targetOutline, instructions },
               (chunk: string) => {
                 generatedContent += chunk;
@@ -242,7 +253,7 @@ export function startWorker(io: Server) {
             // Run consistency check
             const consistencyAgent = new ConsistencyAgent(provider);
             const consistencyResult = await consistencyAgent.execute(
-              { novel, characters },
+              { novel, characters, knowledgeBase: kbContent },
               result.content
             );
 
