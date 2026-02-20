@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Users, Plus, Edit2, Trash2 } from 'lucide-react';
+import { Users, Plus, Edit2, Trash2, Network, LayoutGrid, X } from 'lucide-react';
+import RelationshipGraph from './RelationshipGraph';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
@@ -16,6 +17,7 @@ interface Character {
   personality: string[];
   abilities: { name: string; level: number }[];
   currentState?: string;
+  relationships?: { characterId: string; relation: string }[];
 }
 
 interface CharacterManagerProps {
@@ -25,6 +27,7 @@ interface CharacterManagerProps {
 }
 
 export default function CharacterManager({ novelId, characters, onUpdate }: CharacterManagerProps) {
+  const [viewMode, setViewMode] = useState<'card' | 'graph'>('card');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null);
   const [formData, setFormData] = useState({
@@ -33,6 +36,7 @@ export default function CharacterManager({ novelId, characters, onUpdate }: Char
     personality: '',
     abilities: '',
     currentState: '',
+    relationships: [] as { characterId: string; relation: string }[],
   });
 
   const handleOpenModal = (character?: Character) => {
@@ -44,6 +48,7 @@ export default function CharacterManager({ novelId, characters, onUpdate }: Char
         personality: character.personality.join('、'),
         abilities: character.abilities.map(a => `${a.name}:${a.level}`).join('、'),
         currentState: character.currentState || '',
+        relationships: character.relationships || [],
       });
     } else {
       setEditingCharacter(null);
@@ -53,6 +58,7 @@ export default function CharacterManager({ novelId, characters, onUpdate }: Char
         personality: '',
         abilities: '',
         currentState: '',
+        relationships: [],
       });
     }
     setIsModalOpen(true);
@@ -72,6 +78,7 @@ export default function CharacterManager({ novelId, characters, onUpdate }: Char
         return { name, level: parseInt(level) || 1 };
       }),
       currentState: formData.currentState,
+      relationships: formData.relationships.filter(r => r.characterId && r.relation),
     };
 
     try {
@@ -107,10 +114,28 @@ export default function CharacterManager({ novelId, characters, onUpdate }: Char
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">人物卡</h2>
-        <Button onClick={() => handleOpenModal()}>
-          <Plus className="w-5 h-5 mr-2" />
-          添加人物
-        </Button>
+        <div className="flex items-center space-x-2">
+          <div className="bg-gray-100 dark:bg-gray-800 p-1 rounded-lg flex space-x-1 mr-2 hidden sm:flex">
+            <button
+              onClick={() => setViewMode('card')}
+              className={`p-1.5 rounded-md transition ${viewMode === 'card' ? 'bg-white dark:bg-gray-700 shadow-sm text-primary-600' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}
+              title="卡片视图"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('graph')}
+              className={`p-1.5 rounded-md transition ${viewMode === 'graph' ? 'bg-white dark:bg-gray-700 shadow-sm text-primary-600' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}
+              title="图谱视图"
+            >
+              <Network className="w-4 h-4" />
+            </button>
+          </div>
+          <Button onClick={() => handleOpenModal()}>
+            <Plus className="w-5 h-5 mr-2" />
+            添加人物
+          </Button>
+        </div>
       </div>
 
       {characters.length === 0 ? (
@@ -119,10 +144,12 @@ export default function CharacterManager({ novelId, characters, onUpdate }: Char
           <p>暂无人物卡</p>
           <p className="text-sm mt-2">点击上方按钮添加人物</p>
         </div>
+      ) : viewMode === 'graph' ? (
+        <RelationshipGraph characters={characters} />
       ) : (
         <div className="grid md:grid-cols-2 gap-4">
           {characters.map((character) => (
-            <div key={character.id} className="glass p-6 rounded-xl hover:shadow-lg transition">
+            <div key={character.id} className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700 p-6 rounded-xl hover:shadow-md transition group">
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <h3 className="text-xl font-bold text-gray-900 dark:text-white">
@@ -246,6 +273,56 @@ export default function CharacterManager({ novelId, characters, onUpdate }: Char
               onChange={(e) => setFormData({ ...formData, currentState: e.target.value })}
               placeholder="描述人物当前的状态、处境等"
             />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">人物关系</label>
+              <Button type="button" variant="outline" size="sm" onClick={() => setFormData({ ...formData, relationships: [...formData.relationships, { characterId: '', relation: '' }] })}>
+                <Plus className="w-4 h-4 mr-1" />
+                添加关系
+              </Button>
+            </div>
+            <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+              {formData.relationships.map((rel, index) => (
+                <div key={index} className="flex gap-2">
+                  <select
+                    className="flex h-10 w-[40%] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
+                    value={rel.characterId}
+                    onChange={(e) => {
+                      const newRels = [...formData.relationships];
+                      newRels[index].characterId = e.target.value;
+                      setFormData({ ...formData, relationships: newRels });
+                    }}
+                  >
+                    <option value="">选择人物</option>
+                    {characters.filter(c => c.id !== editingCharacter?.id).map((c) => (
+                      <option key={c.id} value={c.id}>{c.name} ({c.role})</option>
+                    ))}
+                  </select>
+                  <Input
+                    placeholder="关系描述 (如: 师徒)"
+                    value={rel.relation}
+                    onChange={(e) => {
+                      const newRels = [...formData.relationships];
+                      newRels[index].relation = e.target.value;
+                      setFormData({ ...formData, relationships: newRels });
+                    }}
+                    className="flex-1"
+                  />
+                  <Button type="button" variant="ghost" size="sm" onClick={() => {
+                    const newRels = [...formData.relationships];
+                    newRels.splice(index, 1);
+                    setFormData({ ...formData, relationships: newRels });
+                  }}>
+                    <X className="w-4 h-4 text-red-500" />
+                  </Button>
+                </div>
+              ))}
+              {formData.relationships.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-2 border border-dashed rounded-lg">暂无关联信息</p>
+              )}
+            </div>
           </div>
 
           <div className="flex justify-end space-x-4 pt-4">
