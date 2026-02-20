@@ -42,6 +42,10 @@ export const novelsAPI = {
   get: (id: string) => api.get(`/novels/${id}`),
   create: (data: any) => api.post('/novels', data),
   update: (id: string, data: any) => api.patch(`/novels/${id}`, data),
+  updateCover: (id: string, formData: FormData) =>
+    api.patch(`/novels/${id}/cover`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   delete: (id: string) => api.delete(`/novels/${id}`),
   
   // Characters
@@ -56,6 +60,15 @@ export const novelsAPI = {
   // Outline
   updateOutline: (novelId: string, data: { content: string }) =>
     api.patch(`/novels/${novelId}/outline`, data),
+
+  // Plot Threads
+  getPlotThreads: (novelId: string) => api.get(`/novels/${novelId}/threads`),
+  createPlotThread: (novelId: string, data: { title: string; content?: string; status?: string }) =>
+    api.post(`/novels/${novelId}/threads`, data),
+  updatePlotThread: (novelId: string, threadId: string, data: { title?: string; content?: string; status?: string }) =>
+    api.patch(`/novels/${novelId}/threads/${threadId}`, data),
+  deletePlotThread: (novelId: string, threadId: string) =>
+    api.delete(`/novels/${novelId}/threads/${threadId}`),
 
   // Outline Versions & Streaming
   getOutlineVersions: (novelId: string) => api.get(`/novels/${novelId}/outline/versions`),
@@ -85,6 +98,22 @@ export const novelsAPI = {
     
   expandBackground: (data: { genre?: string[]; style?: string[]; background: string }) =>
     api.post('/novels/suggestions/expand-background', data),
+    
+  // Export/Import
+  export: (id: string, format: string = 'json') => api.get(`/novels/${id}/export`, {
+    params: { format },
+    responseType: format === 'json' ? 'json' : 'blob'
+  }),
+  import: (data: any) => {
+    if (data instanceof FormData) {
+      return api.post('/novels/import', data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    }
+    return api.post('/novels/import', data);
+  },
+  extractStyle: (id: string, sampleText: string) => 
+    api.post(`/novels/${id}/extract-style`, { sampleText }),
 };
 
 // Tasks API
@@ -101,6 +130,21 @@ export const tasksAPI = {
   updateChapter: (chapterId: string, data: { title?: string; content?: string }) =>
     api.patch(`/chapters/${chapterId}`, data),
   getChapter: (chapterId: string) => api.get(`/chapters/${chapterId}`),
+
+  // Snapshot (Version History)
+  listSnapshots: (chapterId: string) => api.get(`/chapters/${chapterId}/snapshots`),
+  createSnapshot: (chapterId: string, label?: string) =>
+    api.post(`/chapters/${chapterId}/snapshots`, { label }),
+  getSnapshot: (chapterId: string, snapshotId: string) =>
+    api.get(`/chapters/${chapterId}/snapshots/${snapshotId}`),
+  restoreSnapshot: (chapterId: string, snapshotId: string) =>
+    api.post(`/chapters/${chapterId}/snapshots/${snapshotId}/restore`),
+  deleteSnapshot: (chapterId: string, snapshotId: string) =>
+    api.delete(`/chapters/${chapterId}/snapshots/${snapshotId}`),
+
+  // Analysis
+  checkOoc: (chapterId: string, content: string) =>
+    api.post(`/chapters/${chapterId}/ooc-check`, { content }),
 };
 
 // AI Config API
@@ -145,13 +189,22 @@ export const chatAPI = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`, // If needed, though cookie is used
+        'Authorization': `Bearer ${localStorage.getItem('token')}`, // Backup, mainly cookies
       },
+      credentials: 'include', // Important for cookies
       body: JSON.stringify({ novelId, message, previousContent }),
     });
 
     if (!response.ok) {
-      throw new Error('Chat request failed');
+      try {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Chat request failed');
+      } catch (e) {
+        if (e instanceof Error && e.message !== 'Chat request failed') {
+            throw e;
+        }
+        throw new Error(`Chat request failed: ${response.status} ${response.statusText}`);
+      }
     }
 
     if (!response.body) return;
@@ -183,4 +236,15 @@ export const chatAPI = {
       }
     }
   }
+};
+
+// Sandbox API (Plot Sandbox)
+export const sandboxAPI = {
+  list: (novelId: string) => api.get(`/novels/${novelId}/sandboxes`),
+  create: (novelId: string, data: { title: string; premise: string }) =>
+    api.post(`/novels/${novelId}/sandboxes`, data),
+  update: (id: string, data: { title?: string; premise?: string; content?: string }) =>
+    api.patch(`/sandboxes/${id}`, data),
+  delete: (id: string) => api.delete(`/sandboxes/${id}`),
+  generate: (id: string) => api.post(`/sandboxes/${id}/generate`),
 };

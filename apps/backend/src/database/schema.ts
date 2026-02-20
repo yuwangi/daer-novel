@@ -6,6 +6,7 @@ export const novelStatusEnum = pgEnum('novel_status', ['draft', 'generating', 'c
 export const chapterStatusEnum = pgEnum('chapter_status', ['pending', 'generating', 'completed', 'failed']);
 export const taskStatusEnum = pgEnum('task_status', ['queued', 'running', 'completed', 'failed', 'cancelled']);
 export const taskTypeEnum = pgEnum('task_type', ['outline', 'title', 'chapter_planning', 'chapter_outline', 'chapter_detail', 'content', 'consistency_check']);
+export const plotThreadStatusEnum = pgEnum('plot_thread_status', ['open', 'resolved', 'dropped']);
 
 // Users table (Better-Auth compatible)
 export const user = pgTable('user', {
@@ -60,8 +61,10 @@ export const novels = pgTable('novels', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   title: text('title'),
+  coverUrl: text('cover_url'),
   genre: jsonb('genre').$type<string[]>(), // ['玄幻', '都市']
   style: jsonb('style').$type<string[]>(), // ['爽文', '热血']
+  writingStyleRules: text('writing_style_rules'), // AI-extracted style rules for mimicry
   targetAudience: jsonb('target_audience').$type<string[]>(),
   targetWords: integer('target_words').default(100000),
   minChapterWords: integer('min_chapter_words').default(3000),
@@ -104,6 +107,7 @@ export const knowledgeBases = pgTable('knowledge_bases', {
 });
 
 // Knowledge documents table
+// Knowledge Documents table
 export const knowledgeDocuments = pgTable('knowledge_documents', {
   id: uuid('id').primaryKey().defaultRandom(),
   knowledgeBaseId: uuid('knowledge_base_id').notNull().references(() => knowledgeBases.id, { onDelete: 'cascade' }),
@@ -114,6 +118,28 @@ export const knowledgeDocuments = pgTable('knowledge_documents', {
   embedding: text('embedding'), // Vector embedding as JSON string
   metadata: jsonb('metadata').$type<Record<string, any>>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Plot Sandboxes table - NEW
+export const plotSandboxes = pgTable('plot_sandboxes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  novelId: uuid('novel_id').notNull().references(() => novels.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  premise: text('premise').notNull(), // The "what-if" scenario
+  content: text('content'), // AI generated plot developments or user notes
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Plot Threads table - NEW
+export const plotThreads = pgTable('plot_threads', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  novelId: uuid('novel_id').notNull().references(() => novels.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  content: text('content'),
+  status: plotThreadStatusEnum('status').default('open'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
 // Outline Versions table - NEW
@@ -161,7 +187,18 @@ export const chapters = pgTable('chapters', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Tasks table
+// Chapter Snapshots table (Version History)
+export const chapterSnapshots = pgTable('chapter_snapshots', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  chapterId: uuid('chapter_id').notNull().references(() => chapters.id, { onDelete: 'cascade' }),
+  novelId: uuid('novel_id').notNull().references(() => novels.id, { onDelete: 'cascade' }),
+  content: text('content').notNull(),
+  title: text('title').notNull(),
+  wordCount: integer('word_count').default(0),
+  label: text('label'), // Optional user label, e.g. 'AI改写前', '手动保存'
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 export const tasks = pgTable('tasks', {
   id: uuid('id').primaryKey().defaultRandom(),
   novelId: uuid('novel_id').notNull().references(() => novels.id, { onDelete: 'cascade' }),
@@ -221,10 +258,14 @@ export type Volume = typeof volumes.$inferSelect;
 export type NewVolume = typeof volumes.$inferInsert;
 export type Chapter = typeof chapters.$inferSelect;
 export type NewChapter = typeof chapters.$inferInsert;
+export type ChapterSnapshot = typeof chapterSnapshots.$inferSelect;
+export type NewChapterSnapshot = typeof chapterSnapshots.$inferInsert;
 export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;
-export type AIConfig = typeof aiConfigs.$inferSelect;
-export type NewAIConfig = typeof aiConfigs.$inferInsert;
+export const AIConfig = typeof aiConfigs.$inferSelect;
+export const NewAIConfig = typeof aiConfigs.$inferInsert;
+export type PlotThread = typeof plotThreads.$inferSelect;
+export type NewPlotThread = typeof plotThreads.$inferInsert;
 
 // Relations
 import { relations } from 'drizzle-orm';
@@ -245,11 +286,19 @@ export const novelsRelations = relations(novels, ({ one, many }) => ({
   outlineVersions: many(outlineVersions),
   knowledgeBases: many(knowledgeBases),
   tasks: many(tasks),
+  plotThreads: many(plotThreads),
 }));
 
 export const outlineVersionsRelations = relations(outlineVersions, ({ one }) => ({
   novel: one(novels, {
     fields: [outlineVersions.novelId],
+    references: [novels.id],
+  }),
+}));
+
+export const plotThreadsRelations = relations(plotThreads, ({ one }) => ({
+  novel: one(novels, {
+    fields: [plotThreads.novelId],
     references: [novels.id],
   }),
 }));
@@ -279,6 +328,18 @@ export const chaptersRelations = relations(chapters, ({ one, many }) => ({
     references: [novels.id],
   }),
   tasks: many(tasks),
+  snapshots: many(chapterSnapshots),
+}));
+
+export const chapterSnapshotsRelations = relations(chapterSnapshots, ({ one }) => ({
+  chapter: one(chapters, {
+    fields: [chapterSnapshots.chapterId],
+    references: [chapters.id],
+  }),
+  novel: one(novels, {
+    fields: [chapterSnapshots.novelId],
+    references: [novels.id],
+  }),
 }));
 
 export const tasksRelations = relations(tasks, ({ one }) => ({
