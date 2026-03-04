@@ -16,11 +16,15 @@
     "db:migrate": "pnpm --filter backend migration:run",
     "db:seed": "pnpm --filter backend seed",
     "tauri:dev": "pnpm --filter frontend tauri dev",
-    "tauri:build": "pnpm --filter frontend tauri build"
+    "tauri:build": "pnpm --filter frontend tauri build",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.10.0",
     "concurrently": "^8.2.2",
+    "eslint": "^8.57.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.2",
     "prettier": "^3.2.4",
     "typescript": "^5.3.3"
   },
@@ -32,5 +36,21 @@
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
+  },
+  "lint-staged": {
+    "apps/backend/**/*.{ts,tsx}": [
+      "bash -c 'pnpm --filter backend type-check'",
+      "prettier --write"
+    ],
+    "apps/frontend/**/*.{ts,tsx}": [
+      "bash -c 'pnpm --filter frontend type-check'",
+      "prettier --write"
+    ],
+    "*.{js,jsx,ts,tsx}": [
+      "prettier --write"
+    ],
+    "*.{json,md,css,scss}": [
+      "prettier --write"
+    ]
   }
 }

@@ -13,7 +13,8 @@
     "migrate:prod": "node dist/database/migrate.js",
     "seed": "tsx src/database/seed.ts",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.14.0",
