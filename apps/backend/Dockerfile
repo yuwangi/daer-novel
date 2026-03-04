@@ -13,7 +13,7 @@ COPY apps/frontend/package.json ./apps/frontend/
 
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile=false
+RUN pnpm install --frozen-lockfile=false --ignore-scripts
 
 # Copy source
 COPY . .
@@ -36,7 +36,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY apps/backend/package.json ./apps/backend/
 
 # Install only production dependencies for backend
-RUN pnpm install --prod --filter backend --frozen-lockfile=false
+RUN pnpm install --prod --filter backend --frozen-lockfile=false --ignore-scripts
 
 # Copy built files from stage 1
 COPY --from=builder /app/apps/backend/dist ./apps/backend/dist

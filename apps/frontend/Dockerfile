@@ -12,7 +12,7 @@ COPY apps/backend/package.json ./apps/backend/
 COPY apps/frontend/package.json ./apps/frontend/
 
 # Install dependencies (all, including devDeps for build)
-RUN pnpm install --frozen-lockfile=false
+RUN pnpm install --frozen-lockfile=false --ignore-scripts
 
 # Copy entire source
 COPY . .
