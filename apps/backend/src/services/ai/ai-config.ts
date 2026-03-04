@@ -20,7 +20,7 @@ export async function getAIProviderConfig(userId: string): Promise<AIProviderCon
     }
     return {
       provider: 'openai' as const,
-      model: 'gpt-5.2',
+      model: 'gpt-4.1-mini',
       apiKey,
       baseUrl: process.env.OPENAI_BASE_URL || undefined,
     };

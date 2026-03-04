@@ -548,17 +548,26 @@ router.get('/:id/generate/outline/stream', async (req: AuthRequest, res, next) =
       res.end();
     }
   } catch (error: any) {
-    // Ignore errors caused by the client closing the SSE connection early
-    const isPrematureClose =
-      error?.code === 'ERR_STREAM_PREMATURE_CLOSE' ||
-      error?.message?.includes('Premature close') ||
-      clientClosed;
+    // Case 1: The CLIENT closed the connection (user navigated away / closed tab).
+    // The response stream is already gone — do nothing.
+    if (clientClosed) return;
 
-    if (isPrematureClose) {
-      // Normal — user navigated away or closed the tab
+    // Case 2: The AI provider's stream broke (ERR_STREAM_PREMATURE_CLOSE from upstream).
+    // The client is still connected, so we MUST send an error event and end the response.
+    // Without res.end() the SSE connection stays open and isStreaming never resets on the frontend.
+    const isUpstreamPrematureClose =
+      error?.code === 'ERR_STREAM_PREMATURE_CLOSE' ||
+      error?.message?.includes('Premature close');
+
+    if (isUpstreamPrematureClose) {
+      if (!clientClosed) {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: 'AI连接中断，请重试' })}\n\n`);
+        res.end();
+      }
       return;
     }
 
+    // Case 3: Any other unexpected error.
     console.error('Stream generation error:', error);
     if (!res.headersSent) {
       next(error);

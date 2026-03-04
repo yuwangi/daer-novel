@@ -37,19 +37,17 @@ export default function NewNovelPage() {
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
   const [isExpandingBackground, setIsExpandingBackground] = useState(false);
   const [suggestedTitles, setSuggestedTitles] = useState<string[]>([]);
+  const [showTitlePromptModal, setShowTitlePromptModal] = useState(false);
+  const [titlePromptHint, setTitlePromptHint] = useState('');
 
   const handleGenerateTitle = async () => {
-    if (formData.background.length < 10 && formData.genre.length === 0) {
-      toast.error('请先提供一些选型或背景设定，以便 AI 更好地起名');
-      return;
-    }
-
     setIsGeneratingTitle(true);
+    setShowTitlePromptModal(false);
     try {
       const response = await novelsAPI.suggestTitles({
         genre: formData.genre,
         style: formData.style,
-        background: formData.background
+        background: titlePromptHint || formData.background,
       });
       const titles: string[] = response.data.titles || [response.data.title];
       setSuggestedTitles(titles);
@@ -175,6 +173,7 @@ export default function NewNovelPage() {
               </div>
 
               <div className="grid gap-8">
+                {/* Title input — button is inside the input, pr-28 prevents text from underlapping it */}
                 <div className="space-y-3">
                   <Label className="text-base">作品标题</Label>
                   <div className="relative">
@@ -182,14 +181,15 @@ export default function NewNovelPage() {
                       value={formData.title}
                       onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                       placeholder="输入标题或稍后使用 AI 生成"
-                      className="h-14 pl-4 text-lg bg-background/50 border-input/50 focus:border-primary/50 focus:bg-background transition-all"
+                      className="h-14 pl-4 pr-28 text-lg bg-background/50 border-input/50 focus:border-primary/50 focus:bg-background transition-all"
                     />
-                    <div className="absolute right-3 top-3">
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        className="h-8 text-xs text-primary bg-primary/10 hover:bg-primary/20"
-                        onClick={handleGenerateTitle}
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-xs text-primary bg-primary/10 hover:bg-primary/20 whitespace-nowrap"
+                        onClick={() => setShowTitlePromptModal(true)}
                         disabled={isGeneratingTitle}
                       >
                         {isGeneratingTitle ? (
@@ -197,13 +197,13 @@ export default function NewNovelPage() {
                         ) : (
                           <Sparkles className="w-3 h-3 mr-1" />
                         )}
-                        AI取名
+                        {isGeneratingTitle ? '取名中…' : 'AI 取名'}
                       </Button>
                     </div>
                   </div>
 
                   {/* AI suggested title chips */}
-                  {suggestedTitles.length > 1 && (
+                  {suggestedTitles.length > 0 && (
                     <div className="flex flex-wrap gap-2 pt-1">
                       {suggestedTitles.map((t, i) => (
                         <button
@@ -222,6 +222,53 @@ export default function NewNovelPage() {
                     </div>
                   )}
                 </div>
+
+                {/* AI Title Prompt Modal */}
+                {showTitlePromptModal && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <div className="bg-card rounded-2xl shadow-2xl border border-border p-6 w-full max-w-md mx-4 space-y-4">
+                      <div>
+                        <h3 className="text-lg font-bold">AI 取名</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          可以告诉 AI 你的故事大纲或创意亮点，AI 将据此生成 5 个书名建议。
+                        </p>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-sm">故事大纲 / 创意提示（选填）</Label>
+                        <Textarea
+                          value={titlePromptHint}
+                          onChange={(e) => setTitlePromptHint(e.target.value)}
+                          placeholder={formData.background || '例：穿越到修仙世界的普通人，凭借现代知识逆袭成仙...'}
+                          className="min-h-[120px] resize-none text-sm"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          留空则使用已填写的「故事背景」。已选类型：
+                          {[...formData.genre, ...formData.style].join('、') || '（未选）'}
+                        </p>
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowTitlePromptModal(false)}
+                        >
+                          取消
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleGenerateTitle}
+                        >
+                          <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                          开始生成
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid md:grid-cols-2 gap-8">
                   <div className="space-y-3">

@@ -133,7 +133,8 @@ export function startWorker(io: Server) {
             const kbPlanning = await retrieveRelevantKnowledge('剧情规划 大纲', novelId, 5, 0.3);
             result = await agent.execute({ novel, characters, knowledgeBase: kbPlanning }, input);
             // Parse and save volumes/chapters
-            // Parse and save volumes/chapters
+            // First, clear existing volumes (chapters cascade-delete automatically)
+            await db.delete(schema.volumes).where(eq(schema.volumes.novelId, novelId));
             const planning = JSON.parse(cleanJson(result.content));
             for (const [vIndex, volume] of planning.volumes.entries()) {
               const [volumeRecord] = await db

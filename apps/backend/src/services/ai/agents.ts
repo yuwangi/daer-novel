@@ -129,24 +129,35 @@ export class TitleAgent extends BaseAgent {
   }
 
   protected buildSystemPrompt(context: AgentContext): string {
-    return `你是一位网络小说命名专家。根据小说大纲和设定，生成吸引人的书名。
+    return `你是一位深谙当前中国网络文学市场爆款逻辑的白金级网文命名专家，精通番茄小说、起点中文网、刺猬猫等平台的点击率标题设计。
+你的任务是根据小说设定与大纲，生成具有极强点击欲望、符合当前市场趋势的爆款网文书名。
 
-小说类型：${context.novel.genre?.join('、')}
-风格：${context.novel.style?.join('、')}
+小说类型：${context.novel.genre?.join('、') || '未设定'}
+风格标签：${context.novel.style?.join('、') || '未设定'}
 
-要求：
-1. 书名要吸引目标读者
-2. 体现小说核心卖点
-3. 符合网文命名习惯
-4. 朗朗上口，易于传播`;
+【爆款书名生成指南】：
+1. 拒绝套路与模板化：坚决避免大量使用“XXXX：YYYY”这种泛化且廉价的两段式公式。不要生搬硬套，书名应该自然、有灵气。
+2. 提炼核心意象与情感：从大纲中提取最抓人的一个画面、一个悬念、或者一种极致的情感作为书名核心（例如：《白夜行》、《开端》、《隐秘的角落》）。
+3. 留白与悬念感：好的书名不需要把所有设定都塞进去。用精炼的字词勾勒出意境，让读者产生探索欲，而不是一眼看到底。
+4. 结合文风与气质：
+   - 如果是严肃/悬疑/正剧：书名要冷峻、克制、有哲理暗示。
+   - 如果是治愈/言情/日常：书名可以轻快、生活化，或者带有独特的个人情绪（如《去有风的地方》、《我的天才女友》）。
+   - 如果是奇幻/科幻/玄幻：提取最核心的世界观名词或奇观象徵（如《诡秘之主》、《三体》、《道诡异仙》）。
+5. 字数精简有力：鼓励使用 4-10 个字以内的短名，越简练越要有记忆点和力量感。
+6. 严禁烂俗网文词汇：绝对不要包含“修罗场”、“顶级大佬”、“满级”、“逆天”、“校花”、“霸总”、“娇妻”、“所有人以为”、“其实我”等浓浓的流水线廉价感词汇。
+
+【输出要求】：
+- 发挥极强的创造力和文学功底，生成5个立意新颖、风格迥异且极具高级感的候选书名。
+- 每一个书名都必须精准贴合剧情大纲，坚决不做空洞的“标题党”。`;
   }
 
   protected buildUserPrompt(context: AgentContext, outline: string): string {
-    return `基于《${context.novel.title || '未命名'}》的以下大纲，生成5个候选书名：
+    return `基于《${context.novel.title || '未命名'}》的以下大纲，综合运用上述命名法则，生成5个不同风格又极具网感的候选书名：
 
+【参考大纲】：
 ${outline}
 
-请直接输出5个书名，每行一个。`;
+请直接输出5个书名，每行一个（千万不要加序号或多余的解释文字）。`;
   }
 }
 
@@ -185,26 +196,29 @@ ${background}
 
 // Chapter Planning Agent - 章节编排
 export class ChapterPlanningAgent extends BaseAgent {
+  private targetChapters: number = 0;
+
   constructor(provider: BaseAIProvider) {
     super(provider, 'ChapterPlanningAgent');
   }
 
   protected buildSystemPrompt(context: AgentContext): string {
-    // Calculate estimated chapters
-    const targetChapters = Math.ceil((context.novel.targetWords || 100000) / (context.novel.minChapterWords || 3000));
+    // Calculate required chapters: must strictly match this count
+    this.targetChapters = Math.ceil((context.novel.targetWords || 100000) / (context.novel.minChapterWords || 3000));
     
     return `你是小说章节结构规划师。根据大纲将小说分卷分章。
 
 目标字数：${context.novel.targetWords}字
 每章最少字数：${context.novel.minChapterWords}字
-预计章节数：约${targetChapters}章（请尽量接近这个数量）
+【强制要求】总章节数：必须恰好为 ${this.targetChapters} 章（${context.novel.targetWords}字 ÷ ${context.novel.minChapterWords}字/章 = ${this.targetChapters}章）
 
 要求：
-1. 合理分卷（可选）
-2. 每章有明确主题
-3. 章节标题吸引人
-4. 节奏把控合理
-5. 严格控制章节数量，确保总字数达标`;
+1. 合理分卷，章节分布均匀
+2. 每章有明确主题，概要详尽
+3. 章节标题吸引人，有代入感
+4. 节奏把控合理，早、中、后期各段节奏匹配
+5. 【核心约束】所有分卷的章节合计总数必须等于 ${this.targetChapters} 章，不得减少，否则将导致总字数严重不达标
+6. 若大纲内容不足以支撑该章节数，请主动对每个情节段进行细化拆分（例如："修炼突破"可拆为：困境铺垫→关键契机→突破前夕→成功蜕变等多章）`;
   }
 
   protected buildUserPrompt(context: AgentContext, input: any): string {
@@ -212,11 +226,16 @@ export class ChapterPlanningAgent extends BaseAgent {
       ? { outline: input, additionalRequirements: '' } 
       : (input || { outline: '', additionalRequirements: '' });
     
+    // Recalculate in case buildSystemPrompt wasn't called (defensive)
+    const chapters = this.targetChapters || Math.ceil((context.novel.targetWords || 100000) / (context.novel.minChapterWords || 3000));
+
     return `基于《${context.novel.title}》的以下大纲，生成章节结构：
 
 ${outline}
 
 ${additionalRequirements ? `额外要求：\n${additionalRequirements}\n` : ''}
+
+⚠️ 【强制约束，不得违反】：所有卷的章节总数必须恰好等于 ${chapters} 章。请在输出前自行统计确认，若不足请继续细化拆分情节直至达标。
 
 输出格式（JSON，严禁包含 markdown 代码块，严禁包含其他说明文字，直接返回有效的 JSON 字符串）：
 {
@@ -224,13 +243,13 @@ ${additionalRequirements ? `额外要求：\n${additionalRequirements}\n` : ''}
     {
       "title": "卷名",
       "chapters": [
-        {"title": "章节标题", "summary": "章节概要"}
+        {"title": "章节标题", "summary": "章节概要（50字以上）"}
       ]
     }
   ]
 }`;
   }
-  }
+}
 
 
 // Chapter Outline Agent - 章节大纲
