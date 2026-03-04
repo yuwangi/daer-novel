@@ -15,7 +15,7 @@ export default function HomePage() {
     novelsAPI.list().then((r) => r.data.slice(0, 6))
   );
 
-  const novels = data ?? [];
+  const novels: Array<{ id: string; title?: string | null; genre?: string[] | null; background?: string | null; targetWords?: number | null; status?: string | null }> = data ?? [];
   const loading = isLoading;
 
   return (
