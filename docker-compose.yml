@@ -38,6 +38,8 @@ services:
     container_name: daer-novel-backend
     ports:
       - "8002:8002"
+    env_file:
+      - .env
     environment:
       DATABASE_HOST: postgres
       DATABASE_PORT: 5432
@@ -46,18 +48,13 @@ services:
       DATABASE_PASSWORD: postgres123
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      NODE_ENV: development
-    volumes:
-      - ./apps/backend:/app/apps/backend
-      - /app/node_modules
-      - /app/apps/backend/node_modules
-      - backend_uploads:/app/apps/backend/uploads
+      REDIS_PASSWORD: ""
+      NODE_ENV: production
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: pnpm --filter backend run dev
 
   frontend:
     build:
@@ -65,18 +62,14 @@ services:
       dockerfile: apps/frontend/Dockerfile
     container_name: daer-novel-frontend
     ports:
-      - "8001:8001"
+      - "8001:80"
+    env_file:
+      - .env
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8002
-      NODE_ENV: development
-    volumes:
-      - ./apps/frontend:/app/apps/frontend
-      - /app/node_modules
-      - /app/apps/frontend/node_modules
-      - /app/apps/frontend/.next
+      NODE_ENV: production
     depends_on:
       - backend
-    command: pnpm --filter frontend run dev
 
 volumes:
   daer_novel_pg16_data:

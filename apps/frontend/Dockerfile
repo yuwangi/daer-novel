@@ -7,7 +7,6 @@ RUN npm install -g pnpm
 
 # Copy root configurations
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* .npmrc* ./
-# Copy app package.json files
 COPY apps/backend/package.json ./apps/backend/
 COPY apps/frontend/package.json ./apps/frontend/
 
@@ -22,26 +21,18 @@ ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NODE_ENV production
 
-# Build the frontend
+# Build the frontend (outputs to apps/frontend/out)
 RUN pnpm --filter frontend build
 
-# Final Stage: Runner
-FROM node:18-alpine AS runner
-WORKDIR /app
+# Final Stage: Nginx
+FROM nginx:alpine
 
-ENV NODE_ENV production
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Copy static files from builder
+COPY --from=builder /app/apps/frontend/out /usr/share/nginx/html
 
-# Copy essential files from builder
-COPY --from=builder /app/apps/frontend/public ./apps/frontend/public
-COPY --from=builder /app/apps/frontend/.next/standalone ./
-COPY --from=builder /app/apps/frontend/.next/static ./apps/frontend/.next/static
+# Copy custom Nginx config
+COPY apps/frontend/nginx.conf /etc/nginx/conf.d/default.conf
 
-USER nextjs
+EXPOSE 80
 
-EXPOSE 3000
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
-
-CMD ["node", "apps/frontend/server.js"]
+CMD ["nginx", "-g", "daemon off;"]

@@ -1,7 +1,5 @@
-/** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
-  // Removed `output: 'export'` to allow Next.js Middleware (auth redirect) to work.
+  output: 'export',
   // Static export is incompatible with middleware and server-side features.
   images: {
     unoptimized: true,
