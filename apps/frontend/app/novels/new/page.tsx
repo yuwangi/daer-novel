@@ -36,6 +36,7 @@ export default function NewNovelPage() {
 
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
   const [isExpandingBackground, setIsExpandingBackground] = useState(false);
+  const [suggestedTitles, setSuggestedTitles] = useState<string[]>([]);
 
   const handleGenerateTitle = async () => {
     if (formData.background.length < 10 && formData.genre.length === 0) {
@@ -50,8 +51,10 @@ export default function NewNovelPage() {
         style: formData.style,
         background: formData.background
       });
-      setFormData({ ...formData, title: response.data.title });
-      toast.success('已生成 AI 推荐书名');
+      const titles: string[] = response.data.titles || [response.data.title];
+      setSuggestedTitles(titles);
+      setFormData({ ...formData, title: titles[0] || '' });
+      toast.success(`已生成 ${titles.length} 个 AI 推荐书名，点击选择`);
     } catch (error) {
       console.error('Failed to generate title:', error);
       toast.error('生成书名失败，请重试');
@@ -198,6 +201,26 @@ export default function NewNovelPage() {
                       </Button>
                     </div>
                   </div>
+
+                  {/* AI suggested title chips */}
+                  {suggestedTitles.length > 1 && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {suggestedTitles.map((t, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, title: t })}
+                          className={`px-3 py-1.5 text-sm rounded-full border transition-all ${
+                            formData.title === t
+                              ? 'bg-primary text-primary-foreground border-primary font-semibold shadow-sm'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-primary/50 hover:bg-primary/5'
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-8">

@@ -1,6 +1,20 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
+// Polyfill for File class used by epub-gen-memory in older Node.js versions
+if (typeof global.File === 'undefined') {
+  try {
+    const { File } = require('buffer');
+    if (File) {
+      global.File = File;
+    } else {
+      global.File = class File {} as any;
+    }
+  } catch (e) {
+    global.File = class File {} as any;
+  }
+}
+
 // Load .env files with priority: .env.local > .env
 // Path resolution: src/init-env.ts -> apps/backend/src -> apps/backend -> apps -> root
 const rootDir = path.resolve(__dirname, '../../..');

@@ -2,32 +2,11 @@ import { Router, Request, Response } from 'express';
 import { db, schema } from '../database';
 import { eq } from 'drizzle-orm';
 import { AuthRequest } from '../middleware/auth';
-import { AIProviderFactory } from '../services/ai/providers';
+import { createAIProvider } from '../services/ai/ai-config';
 import { SandboxAgent } from '../services/ai/agents';
 
 const router: Router = Router();
 
-// Helper: get AI config for a user
-const getAIConfig = async (userId: string) => {
-  const aiConfig = await db.query.aiConfigs.findFirst({
-    where: eq(schema.aiConfigs.userId, userId),
-  });
-  if (!aiConfig) {
-    return {
-      provider: 'openai' as const,
-      model: 'gpt-3.5-turbo',
-      apiKey: process.env.OPENAI_API_KEY || '',
-      baseUrl: process.env.OPENAI_BASE_URL || undefined,
-    };
-  }
-  return {
-    provider: aiConfig.provider as 'openai' | 'anthropic' | 'deepseek',
-    model: aiConfig.model,
-    apiKey: aiConfig.apiKey,
-    baseUrl: aiConfig.baseUrl || undefined,
-    temperature: 0.7,
-  };
-};
 
 // ── List all sandboxes for a novel ───────────────────────────────
 router.get('/novels/:novelId/sandboxes', async (req: Request, res: Response): Promise<void> => {
@@ -149,9 +128,8 @@ router.post('/sandboxes/:id/generate', async (req: Request, res: Response): Prom
       .from(schema.characters)
       .where(eq(schema.characters.novelId, sandbox.novelId));
 
-    // Get AI config
-    const aiConfig = await getAIConfig(userId);
-    const provider = AIProviderFactory.create(aiConfig);
+    // Get AI provider
+    const provider = await createAIProvider(userId);
     const agent = new SandboxAgent(provider);
 
     const response = await agent.execute(

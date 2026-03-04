@@ -4,7 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { z } from 'zod';
-import { AIProviderFactory } from '../services/ai/providers';
+import { createAIProvider } from '../services/ai/ai-config';
 import { TitleAgent, ConceptExpandAgent, OutlineAgent, ChapterPlanningAgent, CharacterAgent, GlobalAnalysisAgent, KnowledgeExtractionAgent, StyleExtractionAgent } from '../services/ai/agents';
 import multer from 'multer';
 import path from 'path';
@@ -247,8 +247,7 @@ router.post('/:id/extract-style', async (req: AuthRequest, res, next) => {
     }
 
     // Initialize StyleExtractionAgent
-    const config = await getAIConfig(req.userId!);
-    const provider = AIProviderFactory.create(config);
+    const provider = await createAIProvider(req.userId!);
     const styleAgent = new StyleExtractionAgent(provider);
     
     // Call the agent to extract style rules
@@ -447,6 +446,63 @@ router.delete('/:novelId/threads/:threadId', async (req: AuthRequest, res, next)
   }
 });
 
+// --- Timeline Routes ---
+
+// Get timeline events for novel
+router.get('/:id/timeline', async (req: AuthRequest, res, next) => {
+  try {
+    const events = await db.query.timelineEvents.findMany({
+      where: eq(schema.timelineEvents.novelId, req.params.id),
+      orderBy: (events, { asc }) => [asc(events.order), asc(events.createdAt)],
+    });
+    res.json(events);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Create timeline event
+router.post('/:id/timeline', async (req: AuthRequest, res, next) => {
+  try {
+    const [event] = await db
+      .insert(schema.timelineEvents)
+      .values({
+        novelId: req.params.id,
+        ...req.body,
+      })
+      .returning();
+    res.status(201).json(event);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update timeline event
+router.patch('/:novelId/timeline/:eventId', async (req: AuthRequest, res, next) => {
+  try {
+    const [event] = await db
+      .update(schema.timelineEvents)
+      .set({ ...req.body, updatedAt: new Date() })
+      .where(eq(schema.timelineEvents.id, req.params.eventId))
+      .returning();
+    res.json(event);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete timeline event
+router.delete('/:novelId/timeline/:eventId', async (req: AuthRequest, res, next) => {
+  try {
+    await db
+      .delete(schema.timelineEvents)
+      .where(eq(schema.timelineEvents.id, req.params.eventId));
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
 // --- Outline Routes ---
 
 // Get outline versions
@@ -462,6 +518,12 @@ router.get('/:id/outline/versions', async (req: AuthRequest, res, next) => {
 
 // Stream generate outline
 router.get('/:id/generate/outline/stream', async (req: AuthRequest, res, next) => {
+  let clientClosed = false;
+
+  req.on('close', () => {
+    clientClosed = true;
+  });
+
   try {
     const { outlineService } = await import('../services/outline.service');
     const { mode, existingOutline } = req.query as any;
@@ -476,22 +538,37 @@ router.get('/:id/generate/outline/stream', async (req: AuthRequest, res, next) =
       mode,
       existingOutline,
       (chunk) => {
+        if (clientClosed) return; // client already disconnected, skip
         res.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`);
       }
     );
 
-    res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
-    res.end();
-  } catch (error) {
+    if (!clientClosed) {
+      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+      res.end();
+    }
+  } catch (error: any) {
+    // Ignore errors caused by the client closing the SSE connection early
+    const isPrematureClose =
+      error?.code === 'ERR_STREAM_PREMATURE_CLOSE' ||
+      error?.message?.includes('Premature close') ||
+      clientClosed;
+
+    if (isPrematureClose) {
+      // Normal — user navigated away or closed the tab
+      return;
+    }
+
     console.error('Stream generation error:', error);
     if (!res.headersSent) {
       next(error);
-    } else {
+    } else if (!clientClosed) {
       res.write(`data: ${JSON.stringify({ type: 'error', error: 'Generation failed' })}\n\n`);
       res.end();
     }
   }
 });
+
 
 // Save outline version
 router.post('/:id/outline/versions', async (req: AuthRequest, res, next) => {
@@ -536,42 +613,19 @@ router.post('/:id/outline/versions/:versionId/rollback', async (req: AuthRequest
 
 // --- AI Suggestion Routes ---
 
-const getAIConfig = async (userId: string) => {
-  const aiConfig = await db.query.aiConfigs.findFirst({
-    where: eq(schema.aiConfigs.userId, userId),
-  });
-
-  if (!aiConfig) {
-    return {
-      provider: 'openai' as const,
-      model: 'gpt-3.5-turbo',
-      apiKey: process.env.OPENAI_API_KEY || '',
-      baseUrl: process.env.OPENAI_BASE_URL || undefined,
-    };
-  }
-
-  return {
-    provider: aiConfig.provider as 'openai' | 'anthropic' | 'deepseek',
-    model: aiConfig.model,
-    apiKey: aiConfig.apiKey,
-    baseUrl: aiConfig.baseUrl || undefined,
-    temperature: 0.7,
-  };
-};
-
 // Suggest title
 router.post('/suggestions/titles', async (req: AuthRequest, res, next) => {
   try {
     const { genre, style, background } = req.body;
     console.log(`[AI] Title suggestion requested for genre: ${genre}, style: ${style}`);
     
-    const config = await getAIConfig(req.userId!);
-    console.log(`[AI] Using provider: ${config.provider}, model: ${config.model}, baseUrl: ${config.baseUrl || 'default'}`);
-    
-    const provider = AIProviderFactory.create(config);
+    const provider = await createAIProvider(req.userId!);
+    const config = (provider as any).config;
+    console.log(`[AI] Using provider: ${config?.provider}, model: ${config?.model}, baseUrl: ${config?.baseUrl || 'default'}`);
     const agent = new TitleAgent(provider);
     
     const startTime = Date.now();
+    console.log(`[AI] Sending request at ${new Date().toISOString()}...`);
     const response = await agent.execute(
       { novel: { genre, style, background } },
       background || '未提供具体大纲，请根据类型和风格自由发挥'
@@ -580,7 +634,7 @@ router.post('/suggestions/titles', async (req: AuthRequest, res, next) => {
     console.log(`[AI] Response received in ${duration}ms`);
 
     const titles = response.content.split('\n').map(t => t.replace(/^\d+\.\s*/, '').trim()).filter(Boolean);
-    res.json({ title: titles[0] || response.content.trim() });
+    res.json({ titles, title: titles[0] || response.content.trim() });
   } catch (error: any) {
     console.error('[AI] Title suggestion error:', error.message || error);
     next(error);
@@ -591,8 +645,7 @@ router.post('/suggestions/titles', async (req: AuthRequest, res, next) => {
 router.post('/suggestions/expand-background', async (req: AuthRequest, res, next) => {
   try {
     const { genre, style, background } = req.body;
-    const config = await getAIConfig(req.userId!);
-    const provider = AIProviderFactory.create(config);
+    const provider = await createAIProvider(req.userId!);
     const agent = new ConceptExpandAgent(provider);
 
     const response = await agent.execute(
@@ -829,8 +882,7 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res, next
 
     // 2. Handle Initialization if requested
     if (initialize) {
-      const config = await getAIConfig(req.userId!);
-      const provider = AIProviderFactory.create(config);
+      const provider = await createAIProvider(req.userId!);
 
       let currentBackground = novelData?.background || '';
       let currentSummary = '';

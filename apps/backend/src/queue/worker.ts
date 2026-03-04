@@ -2,7 +2,7 @@ import { Queue, Worker, Job } from 'bullmq';
 import IORedis from 'ioredis';
 import { db, schema } from '../database';
 import { eq } from 'drizzle-orm';
-import { AIProviderFactory } from '../services/ai/providers';
+import { createAIProvider } from '../services/ai/ai-config';
 import {
   OutlineAgent,
   TitleAgent,
@@ -95,42 +95,8 @@ export function startWorker(io: Server) {
           where: eq(schema.characters.novelId, novelId),
         });
 
-        // Get AI config (use default or first available)
-        let aiConfig = await db.query.aiConfigs.findFirst({
-          where: eq(schema.aiConfigs.userId, novel.userId),
-        });
-
-        // Fallback to environment variables if no DB config found
-        if (!aiConfig && process.env.AI_API_KEY) {
-          aiConfig = {
-             id: 'env-config',
-             userId: novel.userId,
-             provider: process.env.AI_PROVIDER || 'openai',
-             model: process.env.AI_MODEL || 'gpt-5.2-chat',
-             apiKey: process.env.AI_API_KEY,
-             baseUrl: process.env.AI_BASE_URL || null,
-             parameters: {
-               temperature: 0.7,
-             },
-             isDefault: 1,
-             createdAt: new Date(),
-             updatedAt: new Date(),
-          };
-        }
-
-        if (!aiConfig) {
-          throw new Error('No AI configuration found. Please configure AI settings or set AI_API_KEY in environment.');
-        }
-
-        const provider = AIProviderFactory.create({
-          provider: aiConfig.provider as any,
-          model: aiConfig.model,
-          apiKey: aiConfig.apiKey,
-          baseUrl: aiConfig.baseUrl || undefined,
-          temperature: aiConfig.parameters?.temperature,
-          maxTokens: aiConfig.parameters?.maxTokens,
-          topP: aiConfig.parameters?.topP,
-        });
+        // Create AI provider using the shared utility (loads DB config, falls back to env)
+        const provider = await createAIProvider(novel.userId);
 
         let result: any;
         let agent: any;

@@ -1,6 +1,8 @@
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import axios from 'axios';
+import { logger } from '../../utils/logger';
+import { getIO } from '../../socket-singleton';
 
 export interface AIProviderConfig {
   provider: 'openai' | 'anthropic' | 'deepseek';
@@ -23,6 +25,7 @@ export interface AIResponse {
   model: string;
 }
 
+
 export abstract class BaseAIProvider {
   protected config: AIProviderConfig;
 
@@ -30,9 +33,84 @@ export abstract class BaseAIProvider {
     this.config = config;
   }
 
-  abstract chat(messages: AIMessage[]): Promise<AIResponse>;
-  abstract streamChat(messages: AIMessage[], onChunk: (chunk: string) => void): Promise<AIResponse>;
+  // --- Abstract methods to be implemented by providers ---
+  abstract _chat(messages: AIMessage[]): Promise<AIResponse>;
+  abstract _streamChat(messages: AIMessage[], onChunk: (chunk: string) => void): Promise<AIResponse>;
+
+  // --- Wrapper methods that broadcast logs to connected clients ---
+  private broadcastLog(interactionId: string, status: string, message: string, type: string = 'system') {
+    const io = getIO();
+    console.log(`[BROADCAST] type=${type} status=${status} interactionId=${interactionId} msgLen=${message.length}`);
+    if (io) {
+      io.emit('global:task:log', {
+        id: Math.random().toString(36).substring(7),
+        interactionId,
+        timestamp: new Date().toISOString(),
+        status,
+        message,
+        type,
+        provider: this.config.provider,
+        model: this.config.model,
+      });
+    } else {
+       logger.debug(`[AI ${status}] ${message.substring(0, 100)}...`);
+    }
+  }
+
+  async chat(messages: AIMessage[]): Promise<AIResponse> {
+    const interactionId = Math.random().toString(36).substring(2, 11); // Generate unqiue 9-char ID
+    
+    // We only want to display the last user message as the "Prompt" for cleaner chat display, 
+    // but the system ones can be logged too if we want. For a chat interface, let's grab the last user message.
+    const lastUserMsg = messages.slice().reverse().find(m => m.role === 'user') || messages[messages.length - 1];
+    const promptPreview = lastUserMsg.content;
+    
+    this.broadcastLog(interactionId, 'running', promptPreview, 'AI_PROMPT');
+    
+    try {
+      const response = await this._chat(messages);
+      this.broadcastLog(interactionId, 'completed', response.content, 'AI_RESPONSE');
+      return response;
+    } catch (error: any) {
+      this.broadcastLog(interactionId, 'failed', `Error: ${error.message}`, 'AI_ERROR');
+      throw error;
+    }
+  }
+
+  async streamChat(messages: AIMessage[], onChunk: (chunk: string) => void): Promise<AIResponse> {
+    const interactionId = Math.random().toString(36).substring(2, 11);
+    
+    const lastUserMsg = messages.slice().reverse().find(m => m.role === 'user') || messages[messages.length - 1];
+    const promptPreview = lastUserMsg.content;
+    this.broadcastLog(interactionId, 'running', promptPreview, 'AI_PROMPT_STREAM');
+    
+    try {
+      const response = await this._streamChat(messages, (chunk: string) => {
+        const io = getIO();
+        if (io) {
+          io.emit('global:task:log', {
+            id: Math.random().toString(36).substring(7),
+            interactionId,
+            timestamp: new Date().toISOString(),
+            status: 'chunk',
+            chunk,
+            type: 'AI_RESPONSE_CHUNK',
+            provider: this.config.provider,
+            model: this.config.model,
+          });
+        }
+        onChunk(chunk);
+      });
+      
+      this.broadcastLog(interactionId, 'completed', response.content, 'AI_STREAM_DONE');
+      return response;
+    } catch (error: any) {
+      this.broadcastLog(interactionId, 'failed', `Stream Error: ${error.message}`, 'AI_ERROR');
+      throw error;
+    }
+  }
 }
+
 
 export class OpenAIProvider extends BaseAIProvider {
   private client: OpenAI;
@@ -45,7 +123,7 @@ export class OpenAIProvider extends BaseAIProvider {
     });
   }
 
-  async chat(messages: AIMessage[]): Promise<AIResponse> {
+  async _chat(messages: AIMessage[]): Promise<AIResponse> {
     const response = await this.client.chat.completions.create({
       model: this.config.model,
       messages: messages as any,
@@ -61,7 +139,7 @@ export class OpenAIProvider extends BaseAIProvider {
     };
   }
 
-  async streamChat(messages: AIMessage[], onChunk: (chunk: string) => void): Promise<AIResponse> {
+  async _streamChat(messages: AIMessage[], onChunk: (chunk: string) => void): Promise<AIResponse> {
     const stream = await this.client.chat.completions.create({
       model: this.config.model,
       messages: messages as any,
@@ -96,7 +174,7 @@ export class AnthropicProvider extends BaseAIProvider {
     });
   }
 
-  async chat(messages: AIMessage[]): Promise<AIResponse> {
+  async _chat(messages: AIMessage[]): Promise<AIResponse> {
     const systemMessage = messages.find(m => m.role === 'system');
     const userMessages = messages.filter(m => m.role !== 'system');
 
@@ -118,7 +196,7 @@ export class AnthropicProvider extends BaseAIProvider {
     };
   }
 
-  async streamChat(messages: AIMessage[], onChunk: (chunk: string) => void): Promise<AIResponse> {
+  async _streamChat(messages: AIMessage[], onChunk: (chunk: string) => void): Promise<AIResponse> {
     const systemMessage = messages.find(m => m.role === 'system');
     const userMessages = messages.filter(m => m.role !== 'system');
 
@@ -150,7 +228,7 @@ export class AnthropicProvider extends BaseAIProvider {
 }
 
 export class DeepSeekProvider extends BaseAIProvider {
-  async chat(messages: AIMessage[]): Promise<AIResponse> {
+  async _chat(messages: AIMessage[]): Promise<AIResponse> {
     const response = await axios.post(
       `${this.config.baseUrl || 'https://api.deepseek.com/v1'}/chat/completions`,
       {
@@ -174,7 +252,7 @@ export class DeepSeekProvider extends BaseAIProvider {
     };
   }
 
-  async streamChat(messages: AIMessage[], onChunk: (chunk: string) => void): Promise<AIResponse> {
+  async _streamChat(messages: AIMessage[], onChunk: (chunk: string) => void): Promise<AIResponse> {
     // DeepSeek streaming implementation (similar to OpenAI)
     const response = await axios.post(
       `${this.config.baseUrl || 'https://api.deepseek.com/v1'}/chat/completions`,

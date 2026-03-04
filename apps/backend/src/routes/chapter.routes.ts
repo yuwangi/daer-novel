@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { db, schema } from '../database';
 import { eq, desc } from 'drizzle-orm';
-import { AIProviderFactory } from '../services/ai/providers';
+import { createAIProvider } from '../services/ai/ai-config';
 import { OocAgent } from '../services/ai/agents';
 
 const router: Router = Router();
@@ -45,38 +45,8 @@ router.post('/:id/ooc-check', async (req: AuthRequest, res, next) => {
       where: eq(schema.characters.novelId, novel.id),
     });
 
-    // 3. Get AI Config
-    let aiConfig = await db.query.aiConfigs.findFirst({
-      where: eq(schema.aiConfigs.userId, userId!),
-    });
-
-    let providerConfig;
-
-    if (!aiConfig) {
-      if (process.env.OPENAI_API_KEY) {
-        providerConfig = {
-          provider: 'openai',
-          model: 'gpt-3.5-turbo',
-          apiKey: process.env.OPENAI_API_KEY,
-          baseUrl: process.env.OPENAI_BASE_URL || undefined,
-          temperature: 0.1, // Strict temperature for evaluation
-        };
-      } else {
-        res.status(400).json({ error: 'AI Configuration not found' });
-        return;
-      }
-    } else {
-      providerConfig = {
-        provider: aiConfig.provider as any,
-        model: aiConfig.model,
-        apiKey: aiConfig.apiKey,
-        baseUrl: aiConfig.baseUrl || undefined,
-        temperature: 0.1, // Strict temperature for evaluation
-      };
-    }
-
     // 4. Initialize Agent and execute
-    const provider = AIProviderFactory.create(providerConfig);
+    const provider = await createAIProvider(userId!);
     const agent = new OocAgent(provider);
 
     const result = await agent.execute({ novel, characters }, content);

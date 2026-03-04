@@ -55,9 +55,14 @@ const corsOptions = {
   credentials: true,
 };
 
+import { setIO } from './socket-singleton';
+
 const io = new Server(httpServer, {
   cors: corsOptions,
 });
+
+// Register io in the global singleton so providers can emit events
+setIO(io);
 
 const PORT = process.env.BACKEND_PORT || 8002;
 
@@ -164,10 +169,9 @@ app.use((_req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-// Start worker
-startWorker(io);
 
 // Start server
+startWorker(io);
 httpServer.listen(PORT, () => {
   logger.info(`🚀 Server running on port ${PORT}`);
   logger.info(`📚 API Docs: http://localhost:${PORT}/api-docs`);

@@ -142,6 +142,18 @@ export const plotThreads = pgTable('plot_threads', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+// Timeline Events table - NEW
+export const timelineEvents = pgTable('timeline_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  novelId: uuid('novel_id').notNull().references(() => novels.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  description: text('description'),
+  timeLabel: text('time_label'),
+  order: integer('order').default(0).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // Outline Versions table - NEW
 export const outlineVersions = pgTable('outline_versions', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -266,6 +278,8 @@ export const AIConfig = typeof aiConfigs.$inferSelect;
 export const NewAIConfig = typeof aiConfigs.$inferInsert;
 export type PlotThread = typeof plotThreads.$inferSelect;
 export type NewPlotThread = typeof plotThreads.$inferInsert;
+export type TimelineEvent = typeof timelineEvents.$inferSelect;
+export type NewTimelineEvent = typeof timelineEvents.$inferInsert;
 
 // Relations
 import { relations } from 'drizzle-orm';
@@ -287,6 +301,7 @@ export const novelsRelations = relations(novels, ({ one, many }) => ({
   knowledgeBases: many(knowledgeBases),
   tasks: many(tasks),
   plotThreads: many(plotThreads),
+  timelineEvents: many(timelineEvents),
 }));
 
 export const outlineVersionsRelations = relations(outlineVersions, ({ one }) => ({
@@ -299,6 +314,13 @@ export const outlineVersionsRelations = relations(outlineVersions, ({ one }) => 
 export const plotThreadsRelations = relations(plotThreads, ({ one }) => ({
   novel: one(novels, {
     fields: [plotThreads.novelId],
+    references: [novels.id],
+  }),
+}));
+
+export const timelineEventsRelations = relations(timelineEvents, ({ one }) => ({
+  novel: one(novels, {
+    fields: [timelineEvents.novelId],
     references: [novels.id],
   }),
 }));

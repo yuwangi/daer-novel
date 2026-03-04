@@ -1,6 +1,7 @@
 import { db, schema } from '../database';
 import { eq, desc } from 'drizzle-orm';
 import { BaseService } from './base.service';
+import { createAIProvider } from './ai/ai-config';
 
 export class OutlineService extends BaseService {
   constructor() {
@@ -134,35 +135,9 @@ export class OutlineService extends BaseService {
     
     if (!novel) throw new Error('Novel not found');
 
-    // 2. Get AI Config for user (use default or first available)
-    const aiConfig = await db.query.aiConfigs.findFirst({
-      where: eq(schema.aiConfigs.userId, userId),
-    });
-
-    // Fallback config if none found
-    const config = aiConfig ? {
-        provider: aiConfig.provider as 'openai' | 'anthropic' | 'deepseek',
-        model: aiConfig.model,
-        apiKey: aiConfig.apiKey,
-        baseUrl: aiConfig.baseUrl || undefined,
-        temperature: aiConfig.parameters?.temperature || 0.7,
-        maxTokens: aiConfig.parameters?.maxTokens || 4000,
-      } : {
-        provider: 'openai' as const,
-        model: 'gpt-3.5-turbo',
-        apiKey: process.env.OPENAI_API_KEY || '',
-        baseUrl: process.env.OPENAI_BASE_URL || undefined,
-      };
-
-    if (!config.apiKey) {
-      throw new Error('AI configuration missing');
-    }
-
-    // 3. Initialize Provider and Agent
-    const { AIProviderFactory } = await import('./ai/providers');
+    // 3. Initialize Provider and Agent using shared utility
     const { OutlineAgent } = await import('./ai/agents');
-    
-    const provider = AIProviderFactory.create(config);
+    const provider = await createAIProvider(userId);
     const agent = new OutlineAgent(provider);
 
     // 4. Execute Stream

@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Modal } from '@/components/ui/modal';
-import { BookOpen, ArrowLeft, Settings, FileText, Users, Database, Sparkles, Play, Loader2, Save, Download, Upload, FileJson, Book, Beaker, Plus, Trash2, Wand2, Bookmark } from 'lucide-react';
+import { BookOpen, ArrowLeft, Settings, FileText, Users, Database, Sparkles, Play, Loader2, Save, Download, Upload, FileJson, Book, Beaker, Plus, Trash2, Wand2, Bookmark, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -20,10 +20,10 @@ import ChapterGenerator from '@/components/novel/ChapterGenerator';
 import KnowledgeManager from '@/components/novel/KnowledgeManager';
 import OutlineVersionManager from '@/components/novel/OutlineVersionManager';
 import PlotThreadManager from '@/components/novel/PlotThreadManager';
+import TimelineManager from '@/components/novel/TimelineManager';
 import GenerationContext from '@/components/novel/GenerationContext';
 import GenerationModeSelector from '@/components/novel/GenerationModeSelector';
 import { novelsAPI, tasksAPI, sandboxAPI } from '@/lib/api';
-import { io, Socket } from 'socket.io-client';
 
 function NovelDetail() {
   const searchParams = useSearchParams();
@@ -33,8 +33,7 @@ function NovelDetail() {
   const [novel, setNovel] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('settings');
   const [loading, setLoading] = useState(true);
-  const [socket, setSocket] = useState<Socket | null>(null);
-  
+
   // Outline generation
   const [outlineVersions, setOutlineVersions] = useState<any[]>([]);
   const [currentVersion, setCurrentVersion] = useState<any>(null);
@@ -240,16 +239,8 @@ function NovelDetail() {
 
   useEffect(() => {
     loadNovel();
-    
-    // Setup WebSocket
-    const newSocket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002');
-    setSocket(newSocket);
-    
-    return () => {
-      newSocket.close();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [novelId]);
+
 
   // Load versions when tab stays on outline or chapters
   useEffect(() => {
@@ -286,6 +277,7 @@ function NovelDetail() {
     { id: 'chapters', label: '章节', icon: BookOpen },
     { id: 'characters', label: '人物卡', icon: Users },
     { id: 'threads', label: '伏笔追踪', icon: Bookmark },
+    { id: 'timeline', label: '时间线', icon: Clock },
     { id: 'knowledge', label: '知识库', icon: Database },
     { id: 'style', label: '文风设定', icon: Sparkles },
     { id: 'sandbox', label: '推演沙盒', icon: Beaker },
@@ -383,18 +375,18 @@ function NovelDetail() {
 
       <div className="container mx-auto px-6 py-8">
         {/* Tabs */}
-        <div className="flex space-x-2 mb-8 overflow-x-auto">
+        <div className="flex space-x-2 mb-8 overflow-x-auto pb-2">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center space-x-2 px-6 py-3 rounded-lg font-semibold transition whitespace-nowrap ${
+              className={`flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
                 activeTab === tab.id
-                  ? 'bg-primary-500 text-white'
-                  : 'glass hover:bg-primary-100 dark:hover:bg-primary-900'
+                  ? 'bg-primary-500 text-white shadow-sm'
+                  : 'glass hover:bg-primary-100 dark:hover:bg-primary-900 border border-transparent dark:border-gray-800'
               }`}
             >
-              <tab.icon className="w-5 h-5" />
+              <tab.icon className="w-4 h-4" />
               <span>{tab.label}</span>
             </button>
           ))}
@@ -773,6 +765,13 @@ function NovelDetail() {
           {activeTab === 'threads' && (
             <Card className="animate-fadeIn p-6 md:p-8">
               <PlotThreadManager novelId={novelId} />
+            </Card>
+          )}
+
+          {/* Timeline Tab */}
+          {activeTab === 'timeline' && (
+            <Card className="animate-fadeIn p-6 md:p-8">
+              <TimelineManager novelId={novelId} />
             </Card>
           )}
 

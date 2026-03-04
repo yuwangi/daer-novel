@@ -22,10 +22,35 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       window.location.href = '/login';
+      return Promise.reject(error);
     }
+
+    // Extract a human-readable error message
+    const serverMsg =
+      error.response?.data?.error ||
+      error.response?.data?.message ||
+      error.message ||
+      '未知错误';
+
+    const status = error.response?.status;
+    const label = status ? `[${status}] ` : '';
+
+    // Show toast – dynamically import sonner to avoid SSR issues
+    if (typeof window !== 'undefined') {
+      import('sonner').then(({ toast }) => {
+        toast.error(`${label}${serverMsg}`, {
+          description: error.config
+            ? `${error.config.method?.toUpperCase()} ${error.config.url}`
+            : undefined,
+          duration: 5000,
+        });
+      });
+    }
+
     return Promise.reject(error);
   }
 );
+
 
 // Auth API
 export const authAPI = {
@@ -69,6 +94,15 @@ export const novelsAPI = {
     api.patch(`/novels/${novelId}/threads/${threadId}`, data),
   deletePlotThread: (novelId: string, threadId: string) =>
     api.delete(`/novels/${novelId}/threads/${threadId}`),
+
+  // Timeline
+  getTimelineEvents: (novelId: string) => api.get(`/novels/${novelId}/timeline`),
+  createTimelineEvent: (novelId: string, data: { title: string; description?: string; timeLabel?: string; order?: number }) =>
+    api.post(`/novels/${novelId}/timeline`, data),
+  updateTimelineEvent: (novelId: string, eventId: string, data: { title?: string; description?: string; timeLabel?: string; order?: number }) =>
+    api.patch(`/novels/${novelId}/timeline/${eventId}`, data),
+  deleteTimelineEvent: (novelId: string, eventId: string) =>
+    api.delete(`/novels/${novelId}/timeline/${eventId}`),
 
   // Outline Versions & Streaming
   getOutlineVersions: (novelId: string) => api.get(`/novels/${novelId}/outline/versions`),

@@ -5,6 +5,9 @@ import './globals.css';
 import { Providers } from './providers';
 import { Toaster } from 'sonner';
 import { AnnouncementModal } from '@/components/AnnouncementModal';
+import { GlobalAILogViewer } from '@/components/layout/GlobalAILogViewer';
+import { NavigationProgress } from '@/components/layout/NavigationProgress';
+import { Suspense } from 'react';
 
 // const inter = Inter({ subsets: ['latin'] });
 
@@ -28,7 +31,9 @@ export default function RootLayout({
           <div className=" bg-background text-foreground selection:bg-primary-100 selection:text-primary-900 dark:selection:bg-primary-900 dark:selection:text-primary-100">
             {children}
           </div>
+          <Suspense fallback={null}><NavigationProgress /></Suspense>
           <AnnouncementModal />
+          <GlobalAILogViewer />
           <Toaster position="top-center" richColors />
         </Providers>
       </body>
