@@ -1,6 +1,9 @@
 'use client';
 
 import { useEffect, useState, useRef, Suspense } from 'react';
+import useSWR from 'swr';
+
+import dynamic from 'next/dynamic';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Modal } from '@/components/ui/modal';
@@ -15,24 +18,41 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import CharacterManager from '@/components/novel/CharacterManager';
-import ChapterGenerator from '@/components/novel/ChapterGenerator';
-import KnowledgeManager from '@/components/novel/KnowledgeManager';
-import OutlineVersionManager from '@/components/novel/OutlineVersionManager';
-import PlotThreadManager from '@/components/novel/PlotThreadManager';
-import TimelineManager from '@/components/novel/TimelineManager';
 import GenerationContext from '@/components/novel/GenerationContext';
 import GenerationModeSelector from '@/components/novel/GenerationModeSelector';
+import OutlineVersionManager from '@/components/novel/OutlineVersionManager';
 import { novelsAPI, tasksAPI, sandboxAPI } from '@/lib/api';
+
+// Lazy-load heavy tab components — only downloaded when the tab is opened
+const TabSkeleton = () => (
+  <div className="space-y-4 animate-pulse">
+    {[1, 2, 3].map((i) => <div key={i} className="h-24 rounded-xl bg-muted/50" />)}
+  </div>
+);
+const ChapterGenerator  = dynamic(() => import('@/components/novel/ChapterGenerator'),  { loading: () => <TabSkeleton /> });
+const KnowledgeManager  = dynamic(() => import('@/components/novel/KnowledgeManager'),  { loading: () => <TabSkeleton /> });
+const CharacterManager  = dynamic(() => import('@/components/novel/CharacterManager'),  { loading: () => <TabSkeleton /> });
+const PlotThreadManager = dynamic(() => import('@/components/novel/PlotThreadManager'), { loading: () => <TabSkeleton /> });
+const TimelineManager   = dynamic(() => import('@/components/novel/TimelineManager'),   { loading: () => <TabSkeleton /> });
+
 
 function NovelDetail() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const novelId = searchParams.get('id') as string;
   
-  const [novel, setNovel] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('settings');
-  const [loading, setLoading] = useState(true);
+
+  // Fetch novel via SWR — cached so revisiting the page is instant
+  const { data: novelData, isLoading: loading, mutate: mutateNovel } = useSWR(
+    novelId ? `/api/novels/${novelId}` : null,
+    () => novelsAPI.get(novelId).then((r) => r.data),
+    { onError: () => router.push('/novels') }
+  );
+
+  // Local edits overlay SWR data so fields remain editable without round trips
+  const [localNovel, setLocalNovel] = useState<any>(null);
+  const displayNovel = localNovel ?? novelData;
 
   // Outline generation
   const [outlineVersions, setOutlineVersions] = useState<any[]>([]);
@@ -109,11 +129,11 @@ function NovelDetail() {
         content,
         mode,
         context: {
-          title: novel?.title,
-          genre: novel?.genre,
-          targetWords: novel?.targetWords,
-          worldSettings: !!novel?.worldSettings,
-          knowledgeBases: novel?.knowledgeBases?.map((k: any) => k.name) || [],
+          title: displayNovel?.title,
+          genre: displayNovel?.genre,
+          targetWords: displayNovel?.targetWords,
+          worldSettings: !!displayNovel?.worldSettings,
+          knowledgeBases: displayNovel?.knowledgeBases?.map((k: any) => k.name) || [],
           mode
         }
       });
@@ -197,8 +217,9 @@ function NovelDetail() {
 
     setIsUploadingCover(true);
     try {
-      const res = await novelsAPI.updateCover(novelId, formData);
-      setNovel({ ...novel, coverUrl: res.data.coverUrl });
+    const res = await novelsAPI.updateCover(novelId, formData);
+      mutateNovel(); // revalidate from server
+
       toast.success('封面上传成功');
     } catch (error) {
       console.error('Cover upload failed:', error);
@@ -207,17 +228,9 @@ function NovelDetail() {
       setIsUploadingCover(false);
     }
   };
-  const loadNovel = async () => {
-    try {
-      const response = await novelsAPI.get(novelId);
-      setNovel(response.data);
-    } catch (error) {
-      console.error('Failed to load novel:', error);
-      router.push('/novels');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // keep localNovel in sync when SWR data changes (e.g. after mutate)
+  useEffect(() => { if (novelData) setLocalNovel(null); }, [novelData]);
+
 
   const loadOutlineVersions = async () => {
     try {
@@ -236,11 +249,6 @@ function NovelDetail() {
       }
     }
   };
-
-  useEffect(() => {
-    loadNovel();
-  }, [novelId]);
-
 
   // Load versions when tab stays on outline or chapters
   useEffect(() => {
@@ -261,7 +269,7 @@ function NovelDetail() {
   }, [activeTab, novelId]);
 
 
-  if (loading) {
+  if (!displayNovel && loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
@@ -269,7 +277,12 @@ function NovelDetail() {
     );
   }
 
-  if (!novel) return null;
+  if (!displayNovel) return null;
+
+  // Alias so the existing JSX below doesn't need to change
+  const novel = displayNovel;
+  const setNovel = (val: any) =>
+    setLocalNovel(typeof val === 'function' ? val(displayNovel) : val);
 
   const tabs = [
     { id: 'settings', label: '基础设定', icon: Settings },
@@ -745,7 +758,7 @@ function NovelDetail() {
                 novelId={novelId}
                 volumes={novel.volumes || []}
                 outline={currentVersion?.content || generatedOutline}
-                onUpdate={loadNovel}
+                onUpdate={mutateNovel}
               />
             </div>
           )}
@@ -756,7 +769,7 @@ function NovelDetail() {
               <CharacterManager
                 novelId={novelId}
                 characters={novel.characters || []}
-                onUpdate={loadNovel}
+                onUpdate={mutateNovel}
               />
             </Card>
           )}
@@ -781,7 +794,7 @@ function NovelDetail() {
               <KnowledgeManager
                 novelId={novelId}
                 knowledgeBases={novel.knowledgeBases || []}
-                onUpdate={loadNovel}
+                onUpdate={mutateNovel}
               />
             </Card>
           )}

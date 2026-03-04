@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import useSWR from 'swr';
 import Link from 'next/link';
 import { Plus, BookOpen, Sparkles, ArrowRight, Clock } from 'lucide-react';
 import { Header } from '@/components/layout/header';
@@ -11,24 +11,12 @@ import { formatNumber } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
 export default function HomePage() {
-  const [novels, setNovels] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading } = useSWR('/api/novels', () =>
+    novelsAPI.list().then((r) => r.data.slice(0, 6))
+  );
 
-  useEffect(() => {
-    loadRecentNovels();
-  }, []);
-
-  const loadRecentNovels = async () => {
-    try {
-      const response = await novelsAPI.list();
-      // Take top 6 recent novels
-      setNovels(response.data.slice(0, 6));
-    } catch (error) {
-      console.error('Failed to load novels:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const novels = data ?? [];
+  const loading = isLoading;
 
   return (
     <div className="bg-background flex flex-col">

@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { BookOpen, Plus, Search, Upload, Download, Loader2, Trash2 } from 'lucide-react';
+import useSWR from 'swr';
+import { useState } from 'react';
+import { BookOpen, Plus, Upload, Loader2, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,35 +12,20 @@ import { Header } from '@/components/layout/header';
 import { Sidebar } from '@/components/layout/sidebar';
 
 export default function NovelsPage() {
-  const [novels, setNovels] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadNovels();
-  }, []);
-
-  const loadNovels = async () => {
-    try {
-      const response = await novelsAPI.list();
-      setNovels(response.data);
-    } catch (error) {
-      console.error('Failed to load novels:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data, isLoading, mutate } = useSWR('/api/novels', () =>
+    novelsAPI.list().then((r) => r.data)
+  );
+  const novels: any[] = data ?? [];
+  const loading = isLoading;
 
   const handleDelete = async (e: React.MouseEvent, id: string, title: string) => {
     e.preventDefault();
     e.stopPropagation();
-    
     if (confirm(`确定要删除小说《${title}》吗？此操作不可撤销。`)) {
       try {
         await novelsAPI.delete(id);
-        alert('删除成功');
-        loadNovels();
+        mutate(); // refresh from cache
       } catch (error) {
-        console.error('Failed to delete novel:', error);
         alert('删除失败');
       }
     }
@@ -62,13 +48,9 @@ export default function NovelsPage() {
             const content = JSON.parse(event.target?.result as string);
             const shouldInitialize = confirm('是否要使用 AI 初始化小说内容（生成大纲、章节以及人设卡）？');
             
-            await novelsAPI.import({
-              ...content,
-              initialize: !!shouldInitialize
-            });
-            
+        await novelsAPI.import({ ...content, initialize: !!shouldInitialize });
             alert('导入成功！');
-            loadNovels();
+            mutate();
           } catch (err) {
             alert('导入失败：文件格式不正确');
           } finally {
@@ -81,9 +63,8 @@ export default function NovelsPage() {
         formData.append('file', file);
         
         await novelsAPI.import(formData);
-        
         alert('导入成功！AI 正在后台初始化小说内容，请稍后刷新。');
-        loadNovels();
+        mutate();
         setImporting(false);
       } else {
         alert('不支持的文件格式');
