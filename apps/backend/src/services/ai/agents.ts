@@ -1,5 +1,5 @@
-import { BaseAIProvider, AIMessage, AIResponse } from './providers';
-import { Novel, Character } from '../../database/schema';
+import { BaseAIProvider, AIMessage, AIResponse } from "./providers";
+import { Novel, Character } from "../../database/schema";
 
 export interface AgentContext {
   novel: Partial<Novel>;
@@ -19,16 +19,19 @@ export abstract class BaseAgent {
   }
 
   protected abstract buildSystemPrompt(context: AgentContext): string;
-  protected abstract buildUserPrompt(context: AgentContext, input?: any): string;
+  protected abstract buildUserPrompt(
+    context: AgentContext,
+    input?: any,
+  ): string;
 
   async execute(context: AgentContext, input?: any): Promise<AIResponse> {
     const messages: AIMessage[] = [
       {
-        role: 'system',
+        role: "system",
         content: this.buildSystemPrompt(context),
       },
       {
-        role: 'user',
+        role: "user",
         content: this.buildUserPrompt(context, input),
       },
     ];
@@ -39,15 +42,15 @@ export abstract class BaseAgent {
   async executeStream(
     context: AgentContext,
     input: any,
-    onChunk: (chunk: string) => void
+    onChunk: (chunk: string) => void,
   ): Promise<AIResponse> {
     const messages: AIMessage[] = [
       {
-        role: 'system',
+        role: "system",
         content: this.buildSystemPrompt(context),
       },
       {
-        role: 'user',
+        role: "user",
         content: this.buildUserPrompt(context, input),
       },
     ];
@@ -59,35 +62,47 @@ export abstract class BaseAgent {
 // Outline Agent - 生成全文大纲
 export class OutlineAgent extends BaseAgent {
   constructor(provider: BaseAIProvider) {
-    super(provider, 'OutlineAgent');
+    super(provider, "OutlineAgent");
   }
 
   protected buildSystemPrompt(context: AgentContext): string {
     return `你是一位资深网络小说大纲策划师。你的任务是根据小说设定生成完整的故事大纲。
 
 小说标题：${context.novel.title}
-小说类型：${context.novel.genre?.join('、')}
-风格标签：${context.novel.style?.join('、')}
+小说类型：${context.novel.genre?.join("、")}
+风格标签：${context.novel.style?.join("、")}
 目标字数：${context.novel.targetWords}字
 背景设定：${context.novel.background}
 
-${context.novel.worldSettings ? `
+${
+  context.novel.worldSettings
+    ? `
 世界观设定：
 - 时间背景：${context.novel.worldSettings.timeBackground}
-- 世界规则：${context.novel.worldSettings.worldRules?.join('；')}
+- 世界规则：${context.novel.worldSettings.worldRules?.join("；")}
 - 力量体系：${context.novel.worldSettings.powerSystem}
-- 禁忌规则：${context.novel.worldSettings.forbiddenRules?.join('；')}
-` : ''}
+- 禁忌规则：${context.novel.worldSettings.forbiddenRules?.join("；")}
+`
+    : ""
+}
 
-${context.characters && context.characters.length > 0 ? `
+${
+  context.characters && context.characters.length > 0
+    ? `
 人物信息：
-${context.characters.map(c => `- ${c.name}（${c.role}）：${c.personality?.join('、')}`).join('\n')}
-` : ''}
+${context.characters.map((c) => `- ${c.name}（${c.role}）：${c.personality?.join("、")}`).join("\n")}
+`
+    : ""
+}
 
-${context.knowledgeBase && context.knowledgeBase.length > 0 ? `
+${
+  context.knowledgeBase && context.knowledgeBase.length > 0
+    ? `
 额外知识库：
-${context.knowledgeBase.join('\n\n')}
-` : ''}
+${context.knowledgeBase.join("\n\n")}
+`
+    : ""
+}
 
 请生成一个结构完整、逻辑清晰的故事大纲，包括：
 1. 故事主线
@@ -100,24 +115,25 @@ ${context.knowledgeBase.join('\n\n')}
   }
 
   protected buildUserPrompt(context: AgentContext, input: any): string {
-    const { mode, existingOutline } = typeof input === 'string' 
-      ? { mode: input, existingOutline: '' } 
-      : (input || { mode: 'initial', existingOutline: '' });
-    
-    switch(mode) {
-      case 'expand':
+    const { mode, existingOutline } =
+      typeof input === "string"
+        ? { mode: input, existingOutline: "" }
+        : input || { mode: "initial", existingOutline: "" };
+
+    switch (mode) {
+      case "expand":
         return `基于以下现有大纲进行扩写，增加更多细节和情节点：\n\n${existingOutline}`;
-      case 'adjust_pace_fast':
+      case "adjust_pace_fast":
         return `调整以下大纲节奏，使其更加紧凑、爽快（删除拖沓情节，加快冲突爆发）：\n\n${existingOutline}`;
-      case 'adjust_pace_slow':
+      case "adjust_pace_slow":
         return `调整以下大纲节奏，使其更加舒缓、细腻（增加铺垫和情感描写）：\n\n${existingOutline}`;
-      case 'strengthen_conflict':
+      case "strengthen_conflict":
         return `强化以下大纲的主线冲突，增加戏剧张力和主角面临的困境：\n\n${existingOutline}`;
-      case 'preserve_characters':
+      case "preserve_characters":
         return `保留人物设定，重新生成大纲（保持角色性格和关系不变）：\n\n${existingOutline}`;
-      case 'initial':
+      case "initial":
       default:
-        return `请为《${context.novel.title}》生成完整的小说大纲。${existingOutline ? `\n\n参考已有剧情脉络：\n${existingOutline}` : ''}`;
+        return `请为《${context.novel.title}》生成完整的小说大纲。${existingOutline ? `\n\n参考已有剧情脉络：\n${existingOutline}` : ""}`;
     }
   }
 }
@@ -125,15 +141,15 @@ ${context.knowledgeBase.join('\n\n')}
 // Title Agent - 生成书名
 export class TitleAgent extends BaseAgent {
   constructor(provider: BaseAIProvider) {
-    super(provider, 'TitleAgent');
+    super(provider, "TitleAgent");
   }
 
   protected buildSystemPrompt(context: AgentContext): string {
     return `你是一位深谙当前中国网络文学市场爆款逻辑的白金级网文命名专家，精通番茄小说、起点中文网、刺猬猫等平台的点击率标题设计。
 你的任务是根据小说设定与大纲，生成具有极强点击欲望、符合当前市场趋势的爆款网文书名。
 
-小说类型：${context.novel.genre?.join('、') || '未设定'}
-风格标签：${context.novel.style?.join('、') || '未设定'}
+小说类型：${context.novel.genre?.join("、") || "未设定"}
+风格标签：${context.novel.style?.join("、") || "未设定"}
 
 【爆款书名生成指南】：
 1. 拒绝套路与模板化：坚决避免大量使用“XXXX：YYYY”这种泛化且廉价的两段式公式。不要生搬硬套，书名应该自然、有灵气。
@@ -152,7 +168,7 @@ export class TitleAgent extends BaseAgent {
   }
 
   protected buildUserPrompt(context: AgentContext, outline: string): string {
-    return `基于《${context.novel.title || '未命名'}》的以下大纲，综合运用上述命名法则，生成5个不同风格又极具网感的候选书名：
+    return `基于《${context.novel.title || "未命名"}》的以下大纲，综合运用上述命名法则，生成5个不同风格又极具网感的候选书名：
 
 【参考大纲】：
 ${outline}
@@ -164,27 +180,34 @@ ${outline}
 // Concept Expand Agent - 灵感扩写 (用于作品创建前)
 export class ConceptExpandAgent extends BaseAgent {
   constructor(provider: BaseAIProvider) {
-    super(provider, 'ConceptExpandAgent');
+    super(provider, "ConceptExpandAgent");
   }
 
   protected buildSystemPrompt(context: AgentContext): string {
     return `你是一位资深网文主编。你的任务是根据作者提供的初步构思，进行文学性的扩写和润色。
 
-小说类型：${context.novel.genre?.join('、') || '未设定'}
-风格标签：${context.novel.style?.join('、') || '未设定'}
+小说类型：${context.novel.genre?.join("、") || "未设定"}
+风格标签：${context.novel.style?.join("、") || "未设定"}
 
 要求：
 1. 扩写内容要保持原意的核心，但增加细节和戏剧性
 2. 文笔要符合网文流行风格
 3. 增加一些悬念或钩子
 
-${context.novel.writingStyleRules ? `
+${
+  context.novel.writingStyleRules
+    ? `
 必须严格遵守的专属文风设定：
 ${context.novel.writingStyleRules}
-` : ''}`;
+`
+    : ""
+}`;
   }
 
-  protected buildUserPrompt(_context: AgentContext, background: string): string {
+  protected buildUserPrompt(
+    _context: AgentContext,
+    background: string,
+  ): string {
     return `基于以下初步初步构想，扩写一段大约 300-500 字的小说简介/背景设定：
 
 ${background}
@@ -193,19 +216,21 @@ ${background}
   }
 }
 
-
 // Chapter Planning Agent - 章节编排
 export class ChapterPlanningAgent extends BaseAgent {
   private targetChapters: number = 0;
 
   constructor(provider: BaseAIProvider) {
-    super(provider, 'ChapterPlanningAgent');
+    super(provider, "ChapterPlanningAgent");
   }
 
   protected buildSystemPrompt(context: AgentContext): string {
     // Calculate required chapters: must strictly match this count
-    this.targetChapters = Math.ceil((context.novel.targetWords || 100000) / (context.novel.minChapterWords || 3000));
-    
+    this.targetChapters = Math.ceil(
+      (context.novel.targetWords || 100000) /
+        (context.novel.minChapterWords || 3000),
+    );
+
     return `你是小说章节结构规划师。根据大纲将小说分卷分章。
 
 目标字数：${context.novel.targetWords}字
@@ -222,18 +247,24 @@ export class ChapterPlanningAgent extends BaseAgent {
   }
 
   protected buildUserPrompt(context: AgentContext, input: any): string {
-    const { outline, additionalRequirements } = typeof input === 'string' 
-      ? { outline: input, additionalRequirements: '' } 
-      : (input || { outline: '', additionalRequirements: '' });
-    
+    const { outline, additionalRequirements } =
+      typeof input === "string"
+        ? { outline: input, additionalRequirements: "" }
+        : input || { outline: "", additionalRequirements: "" };
+
     // Recalculate in case buildSystemPrompt wasn't called (defensive)
-    const chapters = this.targetChapters || Math.ceil((context.novel.targetWords || 100000) / (context.novel.minChapterWords || 3000));
+    const chapters =
+      this.targetChapters ||
+      Math.ceil(
+        (context.novel.targetWords || 100000) /
+          (context.novel.minChapterWords || 3000),
+      );
 
     return `基于《${context.novel.title}》的以下大纲，生成章节结构：
 
 ${outline}
 
-${additionalRequirements ? `额外要求：\n${additionalRequirements}\n` : ''}
+${additionalRequirements ? `额外要求：\n${additionalRequirements}\n` : ""}
 
 ⚠️ 【强制约束，不得违反】：所有卷的章节总数必须恰好等于 ${chapters} 章。请在输出前自行统计确认，若不足请继续细化拆分情节直至达标。
 
@@ -251,17 +282,16 @@ ${additionalRequirements ? `额外要求：\n${additionalRequirements}\n` : ''}
   }
 }
 
-
 // Chapter Outline Agent - 章节大纲
 export class ChapterOutlineAgent extends BaseAgent {
   constructor(provider: BaseAIProvider) {
-    super(provider, 'ChapterOutlineAgent');
+    super(provider, "ChapterOutlineAgent");
   }
 
   protected buildSystemPrompt(context: AgentContext): string {
-    const characterInfo = context.characters?.map(c => 
-      `- ${c.name}（${c.role}）：${c.personality?.join('、')}`
-    ).join('\n');
+    const characterInfo = context.characters
+      ?.map((c) => `- ${c.name}（${c.role}）：${c.personality?.join("、")}`)
+      .join("\n");
 
     return `你是章节大纲撰写专家。为单个章节生成详细的剧情大纲。
  
@@ -269,10 +299,14 @@ export class ChapterOutlineAgent extends BaseAgent {
  人物信息：
  ${characterInfo}
  
- ${context.knowledgeBase && context.knowledgeBase.length > 0 ? `
+ ${
+   context.knowledgeBase && context.knowledgeBase.length > 0
+     ? `
  额外知识库：
- ${context.knowledgeBase.join('\n\n')}
- ` : ''}
+ ${context.knowledgeBase.join("\n\n")}
+ `
+     : ""
+ }
  
  要求：
  1. 情节紧凑，有冲突
@@ -285,7 +319,7 @@ export class ChapterOutlineAgent extends BaseAgent {
     return `生成《${context.novel.title}》第${chapterInfo.order}章《${chapterInfo.title}》的详细大纲。
 
 章节概要：${chapterInfo.summary}
-${context.previousContent ? `\n前文回顾：\n${context.previousContent.slice(-500)}` : ''}
+${context.previousContent ? `\n前文回顾：\n${context.previousContent.slice(-this.provider.config.maxTokens!)}` : ""}
 
 请输出详细的章节大纲（300-500字）。`;
   }
@@ -294,16 +328,20 @@ ${context.previousContent ? `\n前文回顾：\n${context.previousContent.slice(
 // Chapter Detail Agent - 章节细纲
 export class ChapterDetailAgent extends BaseAgent {
   constructor(provider: BaseAIProvider) {
-    super(provider, 'ChapterDetailAgent');
+    super(provider, "ChapterDetailAgent");
   }
 
   protected buildSystemPrompt(context: AgentContext): string {
     return `你是章节细纲设计师。将章节大纲拆分为具体的场景和情节点。
  
- ${context.knowledgeBase && context.knowledgeBase.length > 0 ? `
+ ${
+   context.knowledgeBase && context.knowledgeBase.length > 0
+     ? `
  额外知识库：
- ${context.knowledgeBase.join('\n\n')}
- ` : ''}
+ ${context.knowledgeBase.join("\n\n")}
+ `
+     : ""
+ }
  
  要求：
  1. 每个场景有明确的目标
@@ -312,7 +350,10 @@ export class ChapterDetailAgent extends BaseAgent {
 4. 字数分配合理（目标${context.novel.minChapterWords}字）`;
   }
 
-  protected buildUserPrompt(context: AgentContext, chapterOutline: string): string {
+  protected buildUserPrompt(
+    context: AgentContext,
+    chapterOutline: string,
+  ): string {
     return `基于《${context.novel.title}》的以下章节大纲，生成详细的场景细纲：
 
 ${chapterOutline}
@@ -327,29 +368,40 @@ ${chapterOutline}
 // Content Agent - 正文生成
 export class ContentAgent extends BaseAgent {
   constructor(provider: BaseAIProvider) {
-    super(provider, 'ContentAgent');
+    super(provider, "ContentAgent");
   }
 
   protected buildSystemPrompt(context: AgentContext): string {
-    const characterInfo = context.characters?.map(c => 
-      `- ${c.name}：${c.personality?.join('、')}，当前状态：${c.currentState}`
-    ).join('\n');
+    const characterInfo = context.characters
+      ?.map(
+        (c) =>
+          `- ${c.name}：${c.personality?.join("、")}，当前状态：${c.currentState}`,
+      )
+      .join("\n");
 
     return `你是网络小说作家。根据细纲生成精彩的章节正文。
  
- 小说风格：${context.novel.style?.join('、')}
+ 小说风格：${context.novel.style?.join("、")}
  人物信息：
  ${characterInfo}
  
- ${context.knowledgeBase && context.knowledgeBase.length > 0 ? `
+ ${
+   context.knowledgeBase && context.knowledgeBase.length > 0
+     ? `
  额外知识库：
- ${context.knowledgeBase.join('\n\n')}
- ` : ''}
+ ${context.knowledgeBase.join("\n\n")}
+ `
+     : ""
+ }
 
- ${context.novel.writingStyleRules ? `
+ ${
+   context.novel.writingStyleRules
+     ? `
 必须严格遵守的专属文风设定（务必完美模仿）：
 ${context.novel.writingStyleRules}
- ` : ''}
+ `
+     : ""
+ }
  
  写作要求：
  1. 文笔流畅，代入感强
@@ -364,46 +416,53 @@ ${context.novel.writingStyleRules}
 - 逻辑矛盾`;
   }
 
-  protected buildUserPrompt(context: AgentContext, input: string | { outline: string, instructions?: string }): string {
-    const { outline, instructions } = typeof input === 'string' 
-      ? { outline: input, instructions: '' } 
-      : (input || { outline: '', instructions: '' });
+  protected buildUserPrompt(
+    context: AgentContext,
+    input: string | { outline: string; instructions?: string },
+  ): string {
+    const { outline, instructions } =
+      typeof input === "string"
+        ? { outline: input, instructions: "" }
+        : input || { outline: "", instructions: "" };
 
     return `根据《${context.novel.title}》的以下章节细纲，生成章节正文：
 
 ${outline}
 
-${instructions ? `额外写作要求（必须严格遵守）：\n${instructions}\n` : ''}
+${instructions ? `额外写作要求（必须严格遵守）：\n${instructions}\n` : ""}
 
-${context.previousContent ? `\n前文衔接：\n${context.previousContent.slice(-800)}` : ''}
+${context.previousContent ? `\n前文衔接：\n${context.previousContent.slice(-this.provider.config.maxTokens!)}` : ""}
 
 请开始创作，直接输出正文内容。`;
   }
-  }
-
+}
 
 // Consistency Agent - 一致性校验
 export class ConsistencyAgent extends BaseAgent {
   constructor(provider: BaseAIProvider) {
-    super(provider, 'ConsistencyAgent');
+    super(provider, "ConsistencyAgent");
   }
 
   protected buildSystemPrompt(context: AgentContext): string {
     return `你是小说一致性审核专家。检查内容是否违反设定。
 
 世界观规则：
-${context.novel.worldSettings?.worldRules?.join('\n')}
+${context.novel.worldSettings?.worldRules?.join("\n")}
 
 禁忌规则：
-${context.novel.worldSettings?.forbiddenRules?.join('\n')}
+${context.novel.worldSettings?.forbiddenRules?.join("\n")}
 
 人物设定：
-${context.characters?.map(c => `${c.name}：${JSON.stringify(c.abilities)}`).join('\n')}
+${context.characters?.map((c) => `${c.name}：${JSON.stringify(c.abilities)}`).join("\n")}
 
-${context.knowledgeBase && context.knowledgeBase.length > 0 ? `
+${
+  context.knowledgeBase && context.knowledgeBase.length > 0
+    ? `
 知识库参考：
-${context.knowledgeBase.join('\n\n')}
-` : ''}
+${context.knowledgeBase.join("\n\n")}
+`
+    : ""
+}
  
  检查项：
  1. 是否违反世界观规则
@@ -429,34 +488,46 @@ ${content}
 // Assist Agent - 写作助手
 export class AssistAgent extends BaseAgent {
   constructor(provider: BaseAIProvider) {
-    super(provider, 'AssistAgent');
+    super(provider, "AssistAgent");
   }
 
   protected buildSystemPrompt(context: AgentContext): string {
     return `你是一位专业的网文写作助手。你的任务是辅助作者进行创作，回答他们的问题，或者根据上下文提供写作建议。
 
 小说标题：${context.novel.title}
-小说类型：${context.novel.genre?.join('、')}
-风格标签：${context.novel.style?.join('、')}
+小说类型：${context.novel.genre?.join("、")}
+风格标签：${context.novel.style?.join("、")}
 背景设定：${context.novel.background}
 
-${context.novel.worldSettings ? `
+${
+  context.novel.worldSettings
+    ? `
 世界观设定：
 - 时间背景：${context.novel.worldSettings.timeBackground}
-- 世界规则：${context.novel.worldSettings.worldRules?.join('；')}
+- 世界规则：${context.novel.worldSettings.worldRules?.join("；")}
 - 力量体系：${context.novel.worldSettings.powerSystem}
-- 禁忌规则：${context.novel.worldSettings.forbiddenRules?.join('；')}
-` : ''}
+- 禁忌规则：${context.novel.worldSettings.forbiddenRules?.join("；")}
+`
+    : ""
+}
 
-${context.characters && context.characters.length > 0 ? `
+${
+  context.characters && context.characters.length > 0
+    ? `
 人物信息：
-${context.characters.map(c => `- ${c.name}（${c.role}）：${c.personality?.join('、')}`).join('\n')}
-` : ''}
+${context.characters.map((c) => `- ${c.name}（${c.role}）：${c.personality?.join("、")}`).join("\n")}
+`
+    : ""
+}
 
-${context.novel.writingStyleRules ? `
+${
+  context.novel.writingStyleRules
+    ? `
 必须严格遵守的该小说专属文风设定（如果是续写/改写操作，请完美模仿）：
 ${context.novel.writingStyleRules}
-` : ''}
+`
+    : ""
+}
 
 请根据以上设定和作者提供的小说正文片段（如果有），回答作者的问题。
 回答要求：
@@ -467,10 +538,13 @@ ${context.novel.writingStyleRules}
   }
 
   protected buildUserPrompt(_context: AgentContext, input: any): string {
-    const { message, previousContent } = input || { message: '', previousContent: '' };
-    
+    const { message, previousContent } = input || {
+      message: "",
+      previousContent: "",
+    };
+
     return `当前正文片段（上文）：
-${previousContent ? previousContent.slice(-2000) : '（无）'}
+${previousContent ? previousContent.slice(-this.provider.config.maxTokens!) : "（无）"}
 
 作者的问题/指令：
 ${message}`;
@@ -480,17 +554,21 @@ ${message}`;
 // OOC Agent - 角色一致性检测
 export class OocAgent extends BaseAgent {
   constructor(provider: BaseAIProvider) {
-    super(provider, 'OocAgent');
+    super(provider, "OocAgent");
   }
 
   protected buildSystemPrompt(context: AgentContext): string {
     return `你是一位严谨的文学资深编辑，专长是人物设定连续性（OOC）审查。你的任务是审查小说片段，确认其中的角色（对话、心理、行为、能力表现）是否符合其既定人设。
 
 已知角色设定：
-${context.characters?.map(c => `【${c.name}】(${c.role})
-性格：${c.personality?.join('、')}
-当前状态/描述：${c.currentState || '无'}
-能力专长：${JSON.stringify(c.abilities)}`).join('\n\n')}
+${context.characters
+  ?.map(
+    (c) => `【${c.name}】(${c.role})
+性格：${c.personality?.join("、")}
+当前状态/描述：${c.currentState || "无"}
+能力专长：${JSON.stringify(c.abilities)}`,
+  )
+  .join("\n\n")}
 
 审查要求：
 1. 提取输入片段中出现的所有已知角色。
@@ -515,7 +593,7 @@ ${input}
 // Character Agent - 人物设定生成/提取
 export class CharacterAgent extends BaseAgent {
   constructor(provider: BaseAIProvider) {
-    super(provider, 'CharacterAgent');
+    super(provider, "CharacterAgent");
   }
 
   protected buildSystemPrompt(_context: AgentContext): string {
@@ -533,7 +611,7 @@ export class CharacterAgent extends BaseAgent {
     const chunks = context.sourceChunks || [];
     return `请分析以下小说采样内容并提取/设计角色人设卡：
 
-${chunks.map((c, i) => `--- 采样片段 ${i + 1} ---\n${c}`).join('\n\n')}
+${chunks.map((c, i) => `--- 采样片段 ${i + 1} ---\n${c}`).join("\n\n")}
 
 输出格式（JSON，严禁包含 markdown 代码块）：
 [
@@ -553,7 +631,7 @@ ${chunks.map((c, i) => `--- 采样片段 ${i + 1} ---\n${c}`).join('\n\n')}
 // Global Analysis Agent - 全局统筹分析
 export class GlobalAnalysisAgent extends BaseAgent {
   constructor(provider: BaseAIProvider) {
-    super(provider, 'GlobalAnalysisAgent');
+    super(provider, "GlobalAnalysisAgent");
   }
 
   protected buildSystemPrompt(_context: AgentContext): string {
@@ -578,7 +656,7 @@ export class GlobalAnalysisAgent extends BaseAgent {
     const chunks = context.sourceChunks || [];
     return `请仔细阅读以下小说采样片段（包含开头、中段、结尾），进行深度分析：
 
-${chunks.map((c, i) => `--- 采样片段 ${i + 1} (${i === 0 ? '开头' : i === chunks.length - 1 ? '结尾' : '中段'}) ---\n${c}`).join('\n\n')}
+${chunks.map((c, i) => `--- 采样片段 ${i + 1} (${i === 0 ? "开头" : i === chunks.length - 1 ? "结尾" : "中段"}) ---\n${c}`).join("\n\n")}
 
 请输出 JSON 数据（严禁包含 markdown 代码块）：
 {
@@ -592,7 +670,7 @@ ${chunks.map((c, i) => `--- 采样片段 ${i + 1} (${i === 0 ? '开头' : i === 
 // Knowledge Extraction Agent - 知识提取
 export class KnowledgeExtractionAgent extends BaseAgent {
   constructor(provider: BaseAIProvider) {
-    super(provider, 'KnowledgeExtractionAgent');
+    super(provider, "KnowledgeExtractionAgent");
   }
 
   protected buildSystemPrompt(_context: AgentContext): string {
@@ -609,7 +687,7 @@ export class KnowledgeExtractionAgent extends BaseAgent {
     const chunks = context.sourceChunks || [];
     return `请从以下采样内容中提取核心设定知识点：
 
-${chunks.map((c, i) => `--- 采样片段 ${i + 1} ---\n${c}`).join('\n\n')}
+${chunks.map((c, i) => `--- 采样片段 ${i + 1} ---\n${c}`).join("\n\n")}
 
 输出格式（JSON，严禁包含 markdown 代码块）：
 [
@@ -625,7 +703,7 @@ ${chunks.map((c, i) => `--- 采样片段 ${i + 1} ---\n${c}`).join('\n\n')}
 // Style Extraction Agent - 文风提取
 export class StyleExtractionAgent extends BaseAgent {
   constructor(provider: BaseAIProvider) {
-    super(provider, 'StyleExtractionAgent');
+    super(provider, "StyleExtractionAgent");
   }
 
   protected buildSystemPrompt(_context: AgentContext): string {
@@ -661,23 +739,27 @@ ${input}
 // ================================================================
 export class SandboxAgent extends BaseAgent {
   constructor(provider: BaseAIProvider) {
-    super(provider, 'SandboxAgent');
+    super(provider, "SandboxAgent");
   }
 
   protected buildSystemPrompt(context: AgentContext): string {
-    const characterInfo = context.characters?.map(c =>
-      `- ${c.name}（性格：${c.personality?.join('、')}，状态：${c.currentState}）`
-    ).join('\n') || '（暂无角色信息）';
+    const characterInfo =
+      context.characters
+        ?.map(
+          (c) =>
+            `- ${c.name}（性格：${c.personality?.join("、")}，状态：${c.currentState}）`,
+        )
+        .join("\n") || "（暂无角色信息）";
 
     const stylePart = context.novel.writingStyleRules
       ? `\n文风要求（请模仿以下风格）：\n${context.novel.writingStyleRules}\n`
-      : '';
+      : "";
 
     return `你是一位擅长写网文的剧情推演专家。根据作者提出的假设前提，推演精彩的分支剧情。
 
 小说标题：${context.novel.title}
-小说类型：${context.novel.genre?.join('、') || '未设定'}
-背景设定：${context.novel.background || '未设定'}
+小说类型：${context.novel.genre?.join("、") || "未设定"}
+背景设定：${context.novel.background || "未设定"}
 
 主要角色信息：
 ${characterInfo}
@@ -690,11 +772,13 @@ ${stylePart}
 5. 用纯叙事文本写作，不使用 Markdown 标题或分隔符`;
   }
 
-  protected buildUserPrompt(_context: AgentContext, input: { premise: string; existingContent?: string }): string {
+  protected buildUserPrompt(
+    _context: AgentContext,
+    input: { premise: string; existingContent?: string },
+  ): string {
     const existingPart = input.existingContent
       ? `已有的推演内容（可在此基础上续写或重写）：\n${input.existingContent}\n\n---\n请生成完整的推演结果：`
-      : '请生成完整的推演结果：';
+      : "请生成完整的推演结果：";
     return `请根据以下假设前提，推演出一段精彩的分支剧情：\n\n假设前提：${input.premise}\n\n${existingPart}`;
   }
 }
-

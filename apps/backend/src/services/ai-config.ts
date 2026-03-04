@@ -1,6 +1,6 @@
-import { db, schema } from "../../database";
+import { db, schema } from "../database";
 import { eq } from "drizzle-orm";
-import { AIProviderFactory, AIProviderConfig } from "./providers";
+import { AIProviderFactory, AIProviderConfig } from "./ai/providers";
 
 export const DEFAULT_MAX_TOKENS = 1000000;
 

@@ -1,21 +1,21 @@
-import '../init-env';
-import { db, schema } from './index';
-import { logger } from '../utils/logger';
-import bcrypt from 'bcryptjs';
+import "../init-env";
+import { db, schema } from "./index";
+import { logger } from "../utils/logger";
+import bcrypt from "bcryptjs";
 
 async function seed() {
   try {
-    logger.info('Seeding database...');
+    logger.info("Seeding database...");
 
     // Create demo user
-    const hashedPassword = await bcrypt.hash('demo123', 10);
+    const hashedPassword = await bcrypt.hash("demo123", 10);
     const [user] = await db
       .insert(schema.user)
       .values({
         id: crypto.randomUUID(),
-        email: 'demo@daer-novel.com',
+        email: "demo@daer-novel.com",
         password: hashedPassword,
-        name: 'Demo User',
+        name: "Demo User",
       })
       .returning();
 
@@ -24,21 +24,21 @@ async function seed() {
     // Create demo AI config
     await db.insert(schema.aiConfigs).values({
       userId: user.id,
-      provider: 'openai',
-      model: 'gpt-5.2-chat',
-      apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
-      baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+      provider: "openai",
+      model: "gpt-4.1-mini",
+      apiKey: process.env.OPENAI_API_KEY || "your-api-key-here",
+      baseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
       parameters: {
         temperature: 0.7,
-        maxTokens: 4000,
+        maxTokens: 1000000,
       },
       isDefault: 1,
     });
 
-    logger.info('Seed completed successfully');
+    logger.info("Seed completed successfully");
     process.exit(0);
   } catch (error) {
-    logger.error('Seed failed:', error);
+    logger.error("Seed failed:", error);
     process.exit(1);
   }
 }
