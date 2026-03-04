@@ -2,36 +2,46 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Copy root config files
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* .npmrc* ./
+# Install pnpm
+RUN npm install -g pnpm
 
+# Copy root configurations
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* .npmrc* ./
+# Copy app package.json files
 COPY apps/backend/package.json ./apps/backend/
 COPY apps/frontend/package.json ./apps/frontend/
 
-# Install dependencies
-RUN npm install -g pnpm && pnpm install --frozen-lockfile=false
+# Install dependencies (all, including devDeps for build)
+RUN pnpm install --frozen-lockfile=false
 
-# Copy source code
+# Copy entire source
 COPY . .
 
 # Build args
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NODE_ENV production
 
-# Build frontend (static export to apps/frontend/out)
+# Build the frontend
 RUN pnpm --filter frontend build
 
-# Stage 2: Serve with Nginx
-FROM nginx:alpine
+# Final Stage: Runner
+FROM node:18-alpine AS runner
+WORKDIR /app
 
-LABEL org.opencontainers.image.source="https://github.com/yuwangi/daer-novel"
+ENV NODE_ENV production
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 
-# Copy static files from builder
-COPY --from=builder /app/apps/frontend/out /usr/share/nginx/html
+# Copy essential files from builder
+COPY --from=builder /app/apps/frontend/public ./apps/frontend/public
+COPY --from=builder /app/apps/frontend/.next/standalone ./
+COPY --from=builder /app/apps/frontend/.next/static ./apps/frontend/.next/static
 
-# Copy custom Nginx config
-COPY apps/frontend/nginx.conf /etc/nginx/conf.d/default.conf
+USER nextjs
 
-EXPOSE 80
+EXPOSE 3000
+ENV PORT 3000
+ENV HOSTNAME "0.0.0.0"
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "apps/frontend/server.js"]
