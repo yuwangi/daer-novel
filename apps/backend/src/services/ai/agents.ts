@@ -216,69 +216,100 @@ ${background}
   }
 }
 
-// Chapter Planning Agent - 章节编排
-export class ChapterPlanningAgent extends BaseAgent {
-  private targetChapters: number = 0;
+// Volume Planning Agent - 分卷规划
+export class VolumePlanningAgent extends BaseAgent {
+  constructor(provider: BaseAIProvider) {
+    super(provider, "VolumePlanningAgent");
+  }
 
+  protected buildSystemPrompt(context: AgentContext): string {
+    return `你是一位资深网文主编。你的任务是根据小说大纲进行【宏观分卷规划】。
+    
+小说标题：${context.novel.title}
+目标总字数：${context.novel.targetWords}字
+目标章节规模：每卷建议包含 150-250 章
+
+要求：
+1. **宏观拆分**：根据大纲脉络，将全书拆分为若干大卷（如：第一卷：初出茅庐；第二卷：名动一方...）。
+2. **卷概要详尽**：每卷必须提供清晰的剧情走向概要，需涵盖该卷的核心矛盾、高潮及转场。
+3. **结构合理**：确保各卷之间逻辑衔接紧密，符合长篇连载的节奏（起承转合）。
+
+输出格式（JSON，严禁包含 markdown 代码块）：
+{
+  "volumes": [
+    {
+      "title": "卷名",
+      "summary": "本卷核心剧情概要（200-500字）"
+    }
+  ]
+}`;
+  }
+
+  protected buildUserPrompt(context: AgentContext, outline: string): string {
+    return `基于《${context.novel.title}》的以下大纲，规划全书的分卷结构：
+
+${outline}
+
+【重要要求】：请直接返回有效的 JSON 字符串，严禁包含 markdown 代码块标识符（如 \` \` \` json），严禁包含任何前导或后置的说明文字。保证输出仅包含纯净的 JSON。`;
+  }
+}
+
+// Chapter Planning Agent - 阶段性章节编排 (按卷生成)
+export class ChapterPlanningAgent extends BaseAgent {
   constructor(provider: BaseAIProvider) {
     super(provider, "ChapterPlanningAgent");
   }
 
   protected buildSystemPrompt(context: AgentContext): string {
-    // Calculate required chapters: must strictly match this count
-    this.targetChapters = Math.ceil(
-      (context.novel.targetWords || 100000) /
-        (context.novel.minChapterWords || 3000),
-    );
-
-    return `你是小说章节结构规划师。根据大纲将小说分卷分章。
-
-目标字数：${context.novel.targetWords}字
-每章最少字数：${context.novel.minChapterWords}字
-【强制要求】总章节数：必须恰好为 ${this.targetChapters} 章（${context.novel.targetWords}字 ÷ ${context.novel.minChapterWords}字/章 = ${this.targetChapters}章）
+    return `你是一位精密的小说章节规划师。你的任务是针对特定的【卷（Volume）】进行详细的章节拆分。
+    
+小说标题：${context.novel.title}
+每章建议字数：${context.novel.minChapterWords}字
 
 要求：
-1. 合理分卷，章节分布均匀
-2. 每章有明确主题，概要详尽
-3. 章节标题吸引人，有代入感
-4. 节奏把控合理，早、中、后期各段节奏匹配
-5. 【核心约束】所有分卷的章节合计总数必须等于 ${this.targetChapters} 章，不得减少，否则将导致总字数严重不达标
-6. 若大纲内容不足以支撑该章节数，请主动对每个情节段进行细化拆分（例如："修炼突破"可拆为：困境铺垫→关键契机→突破前夕→成功蜕变等多章）`;
+1. **微观拆分**：根据提供的【卷概要】，将其细化为具体的章节列表。
+2. **章节连贯**：每章有明确的主题，概要需详尽（50字以上），确保情节推进自然。
+3. **节奏把控**：在卷内保持良好的冲突密度，合理设置钩子。
+
+输出格式（JSON，严禁包含 markdown 代码块）：
+{
+  "chapters": [
+    {"title": "章节标题", "summary": "章节概要"}
+  ]
+}
+`;
   }
 
-  protected buildUserPrompt(context: AgentContext, input: any): string {
-    const { outline, additionalRequirements } =
-      typeof input === "string"
-        ? { outline: input, additionalRequirements: "" }
-        : input || { outline: "", additionalRequirements: "" };
+  protected buildUserPrompt(
+    context: AgentContext,
+    input: {
+      volumeTitle: string;
+      volumeSummary: string;
+      novelOutline: string;
+      targetCount: number;
+      existingChaptersContext?: string;
+      additionalRequirements?: string;
+    },
+  ): string {
+    return `当前正在为《${context.novel.title}》的以下卷进行章节规划：
 
-    // Recalculate in case buildSystemPrompt wasn't called (defensive)
-    const chapters =
-      this.targetChapters ||
-      Math.ceil(
-        (context.novel.targetWords || 100000) /
-          (context.novel.minChapterWords || 3000),
-      );
+【卷名】：${input.volumeTitle}
+【卷概要】：${input.volumeSummary}
 
-    return `基于《${context.novel.title}》的以下大纲，生成章节结构：
+【全书大纲参考】：
+${input.novelOutline}
 
-${outline}
+${input.existingChaptersContext ? `【本卷已有章节（请跳过这些已有的剧情，继续往下发展）】：\n${input.existingChaptersContext}\n` : ""}
 
-${additionalRequirements ? `额外要求：\n${additionalRequirements}\n` : ""}
+【目标生成章节数】：${input.targetCount} 章
 
-⚠️ 【强制约束，不得违反】：所有卷的章节总数必须恰好等于 ${chapters} 章。请在输出前自行统计确认，若不足请继续细化拆分情节直至达标。
+${input.additionalRequirements ? `额外要求：\n${input.additionalRequirements}\n` : ""}
 
-输出格式（JSON，严禁包含 markdown 代码块，严禁包含其他说明文字，直接返回有效的 JSON 字符串）：
-{
-  "volumes": [
-    {
-      "title": "卷名",
-      "chapters": [
-        {"title": "章节标题", "summary": "章节概要（50字以上）"}
-      ]
-    }
-  ]
-}`;
+【重要要求】：
+1. 请为本卷生成详细的章节列表，数量应接近 ${input.targetCount} 章。
+${input.existingChaptersContext ? "2. 由于本卷已存在部分章节，请紧密承接上面提供的【本卷已有章节】的剧情线索，继续展开后续剧情！切勿从头开始。" : "2. 请从头开始为本卷规划情节。"}
+3. 章节标题必须纯净，**绝对不要**包含任何“第X章”或“第一章”之类的序号前缀。直接输出纯标题内容（例如不要输出"第一章：青铜裂镜"，直接输出"青铜裂镜"）。
+4. 请直接返回有效的 JSON 字符串，严禁包含 markdown 代码块标识符，严禁包含任何前导或后置的说明文字。保证输出仅包含纯净的 JSON。`;
   }
 }
 
@@ -476,7 +507,7 @@ ${context.knowledgeBase.join("\n\n")}
 
 ${content}
 
-输出格式（JSON，严禁包含 markdown 代码块，严禁包含其他说明文字，直接返回有效的 JSON 字符串）：
+【重要要求】：请直接返回有效的 JSON 字符串，严禁包含 markdown 代码块标识符（如 \` \` \` json），严禁包含任何前导或后置的说明文字。保证输出仅包含纯净的 JSON：
 {
   "passed": true/false,
   "issues": ["问题1", "问题2"],
@@ -582,7 +613,7 @@ ${context.characters
 
 ${input}
 
-输出格式（JSON，严禁包含 markdown 代码块，严禁包含其他说明文字，直接返回有效的 JSON 字符串）：
+【重要要求】：请直接返回有效的 JSON 字符串，严禁包含 markdown 代码块标识符（如 \` \` \` json），严禁包含任何前导或后置的说明文字。保证输出仅包含纯净的 JSON：
 {
   "passed": true/false,
   "issues": ["角色A的违和点描述", "角色B的能力超限描述"]
@@ -613,7 +644,7 @@ export class CharacterAgent extends BaseAgent {
 
 ${chunks.map((c, i) => `--- 采样片段 ${i + 1} ---\n${c}`).join("\n\n")}
 
-输出格式（JSON，严禁包含 markdown 代码块）：
+【重要要求】：请直接返回有效的 JSON 字符串，严禁包含 markdown 代码块标识符（如 \` \` \` json），严禁包含任何前导或后置的说明文字。应包含 1-10 的 importance 权重。保证输出仅包含纯净的 JSON 数组：
 [
   {
     "name": "角色姓名",
@@ -623,8 +654,7 @@ ${chunks.map((c, i) => `--- 采样片段 ${i + 1} ---\n${c}`).join("\n\n")}
     "capabilities": "【重点】能力体系、功法技能、过人之处或职业专长",
     "importance": 10
   }
-]
-（importance 为 1-10 的数字，10 为最高优先级）`;
+]`;
   }
 }
 
@@ -658,7 +688,7 @@ export class GlobalAnalysisAgent extends BaseAgent {
 
 ${chunks.map((c, i) => `--- 采样片段 ${i + 1} (${i === 0 ? "开头" : i === chunks.length - 1 ? "结尾" : "中段"}) ---\n${c}`).join("\n\n")}
 
-请输出 JSON 数据（严禁包含 markdown 代码块）：
+【重要要求】：请直接返回有效的 JSON 字符串，严禁包含 markdown 代码块标识符（如 \` \` \` json），严禁包含任何前导或后置的说明文字。保证输出仅包含纯净的 JSON：
 {
   "background": "核心背景设定与世界观描述（300-500字），重点描述时代、地点、核心规则。",
   "theme": "小说类型与主题风格（如：玄幻-凡人流、科幻-赛博朋克、都市-重生流等）。",
@@ -689,7 +719,7 @@ export class KnowledgeExtractionAgent extends BaseAgent {
 
 ${chunks.map((c, i) => `--- 采样片段 ${i + 1} ---\n${c}`).join("\n\n")}
 
-输出格式（JSON，严禁包含 markdown 代码块）：
+【重要要求】：请直接返回有效的 JSON 字符串，严禁包含 markdown 代码块标识符（如 \` \` \` json），严禁包含任何前导或后置的说明文字。保证输出仅包含纯净的 JSON 数组：
 [
   {
     "category": "类别（如：力量体系）",
@@ -721,7 +751,7 @@ export class StyleExtractionAgent extends BaseAgent {
 ${input}
 --- 文本采样结束 ---
 
-请从以下几个维度进行深度提炼，并输出 JSON 数据（严禁包含 markdown 代码块）：
+【重要要求】：请从以下几个维度进行深度提炼，并请直接返回有效的 JSON 字符串，严禁包含 markdown 代码块标识符（如 \` \` \` json），严禁包含任何前导或后置的说明文字。保证输出仅包含纯净的 JSON：
 {
   "sentence_length": "句子长短习惯（例如：喜欢用短句增加节奏感，还是喜欢长难句进行细腻叙述）",
   "vocabulary": "词汇偏好（例如：用词华丽复古，还是通俗接地气，或是带有特定的二次元/网文色彩）",

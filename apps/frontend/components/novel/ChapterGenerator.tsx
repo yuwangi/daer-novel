@@ -1,12 +1,29 @@
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Loader2, Play, CheckCircle, XCircle, Eye, Edit2, Sparkles, Settings } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Modal } from '@/components/ui/modal';
-import { io, Socket } from 'socket.io-client';
-import { tasksAPI } from '@/lib/api';
-import { toast } from 'sonner';
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Loader2,
+  Play,
+  CheckCircle,
+  XCircle,
+  Eye,
+  Edit2,
+  Sparkles,
+  Settings,
+  Book,
+  Plus,
+  Trash2,
+  Save,
+  X,
+  FileText,
+  Settings2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Modal } from "@/components/ui/modal";
+import { io, Socket } from "socket.io-client";
+import { tasksAPI } from "@/lib/api";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface Chapter {
   id: string;
@@ -16,13 +33,14 @@ interface Chapter {
   detailOutline?: string;
   content?: string;
   wordCount: number;
-  status: 'pending' | 'generating' | 'completed' | 'failed';
+  status: "pending" | "generating" | "completed" | "failed";
 }
 
 interface Volume {
   id: string;
   title: string;
   order: number;
+  summary?: string;
   chapters: Chapter[];
 }
 
@@ -33,65 +51,130 @@ interface ChapterGeneratorProps {
   onUpdate: () => void;
 }
 
-export default function ChapterGenerator({ novelId, volumes, outline, onUpdate }: ChapterGeneratorProps) {
+export default function ChapterGenerator({
+  novelId,
+  volumes,
+  outline,
+  onUpdate,
+}: ChapterGeneratorProps) {
   const router = useRouter();
-  const [generatingChapterId, setGeneratingChapterId] = useState<string | null>(null);
+  const [generatingChapterId, setGeneratingChapterId] = useState<string | null>(
+    null,
+  );
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
-  const [generationStatus, setGenerationStatus] = useState('');
+  const [generationStatus, setGenerationStatus] = useState("");
   const [socket, setSocket] = useState<Socket | null>(null);
 
   // Edit State
   const [isEditing, setIsEditing] = useState(false);
-  const [editContent, setEditContent] = useState('');
+  const [editContent, setEditContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  
+
   // Structure Generation State
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [additionalRequirements, setAdditionalRequirements] = useState('');
+  const [additionalRequirements, setAdditionalRequirements] = useState("");
+  const [targetCount, setTargetCount] = useState(30);
   const [isGeneratingStructure, setIsGeneratingStructure] = useState(false);
+  const [draftChapters, setDraftChapters] = useState<
+    { title: string; summary: string }[] | null
+  >(null);
+  const [draftVolumeId, setDraftVolumeId] = useState<string | null>(null);
+  const [isDraftModalOpen, setIsDraftModalOpen] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+
+  // Volume Structure Draft State
+  const [isVolumeSettingsModalOpen, setIsVolumeSettingsModalOpen] =
+    useState(false);
+  const [volumeAdditionalRequirements, setVolumeAdditionalRequirements] =
+    useState("");
+  const [draftVolumes, setDraftVolumes] = useState<
+    { title: string; summary: string }[] | null
+  >(null);
+  const [isVolumeDraftModalOpen, setIsVolumeDraftModalOpen] = useState(false);
+  const [isSavingVolumeDraft, setIsSavingVolumeDraft] = useState(false);
+
+  // Volume Inline-Edit State
+  const [editingVolumeId, setEditingVolumeId] = useState<string | null>(null);
+  const [editVolumeTitle, setEditVolumeTitle] = useState("");
+  const [editVolumeSummary, setEditVolumeSummary] = useState("");
+  const [isSavingVolumeEdit, setIsSavingVolumeEdit] = useState(false);
+
+  // Chapter Inline-Edit State
+  const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
+  const [editChapterTitle, setEditChapterTitle] = useState("");
+  const [editChapterOutline, setEditChapterOutline] = useState("");
+  const [isSavingChapterEdit, setIsSavingChapterEdit] = useState(false);
 
   // Content Generation State
-  const [activeChapterForConfig, setActiveChapterForConfig] = useState<Chapter | null>(null);
-  const [contentOutline, setContentOutline] = useState('');
-  const [contentInstructions, setContentInstructions] = useState('');
+  const [activeChapterForConfig, setActiveChapterForConfig] =
+    useState<Chapter | null>(null);
+  const [contentOutline, setContentOutline] = useState("");
+  const [contentInstructions, setContentInstructions] = useState("");
 
   useEffect(() => {
     // Setup WebSocket
-    const socketUrl = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? window.location.origin : 'http://localhost:8002');
+    const socketUrl =
+      process.env.NEXT_PUBLIC_API_URL ||
+      (process.env.NODE_ENV === "production"
+        ? window.location.origin
+        : "http://localhost:8002");
     const newSocket = io(socketUrl, {
-      path: '/socket.io', // Ensure socket.io path matches backend
+      path: "/socket.io", // Ensure socket.io path matches backend
     });
     setSocket(newSocket);
-    
+
     // Listen for structure generation events
-    newSocket.on('novel:updated', (data) => {
-       if (data.novelId === novelId) {
-          onUpdate();
-          setIsGeneratingStructure(false);
-       }
+    newSocket.on("novel:updated", (data) => {
+      if (data.novelId === novelId) {
+        onUpdate();
+        // Note: we don't reset isGeneratingStructure here anymore
+        // as we rely on task:completed for better precision
+      }
     });
 
     // Listen for task events
-    newSocket.on('task:progress', (data) => {
-       setGenerationProgress(data.progress || 0);
-       setGenerationStatus(data.message || '生成中...');
-    });
-    
-    newSocket.on('task:completed', (data) => {
-       setGenerationProgress(100);
-       setGenerationStatus('生成完成');
-       setTimeout(() => {
-          setGeneratingChapterId(null);
-          onUpdate();
-       }, 500);
+    newSocket.on("task:progress", (data) => {
+      setGenerationProgress(data.progress || 0);
+      setGenerationStatus(data.message || "生成中...");
     });
 
-    newSocket.on('task:failed', (data) => {
-       setGenerationStatus('生成失败');
-       toast.error(`生成失败: ${data.error}`);
-       setGeneratingChapterId(null);
+    newSocket.on("task:completed", (data) => {
+      setGenerationProgress(100);
+      setGenerationStatus("生成完成");
+
+      if (data.type === "chapter_planning" && data.result?.chapters) {
+        setDraftChapters(data.result.chapters);
+        // Keep the volumeId in a separate state so save works after activeVolumeForChapters is cleared
+        setDraftVolumeId(activeVolumeForChapters?.id || null);
+        setIsDraftModalOpen(true);
+      } else if (data.type === "volume_planning" && data.result?.volumes) {
+        setDraftVolumes(data.result.volumes);
+        setIsVolumeDraftModalOpen(true);
+      } else if (data.type === "content") {
+        // Chapter content generated successfully
+        setGeneratingChapterId(null);
+        onUpdate(); // refresh the list to show new content
+        return; // Avoid the setTimeout below for content generation
+      }
+
+      setIsGeneratingStructure(false);
+      setActiveVolumeForChapters(null);
+      setTimeout(() => {
+        setGeneratingChapterId(null);
+        onUpdate();
+      }, 500);
+    });
+
+    newSocket.on("task:failed", (data) => {
+      console.error("Task failed event received:", data);
+      setGenerationStatus("生成失败");
+      toast.error(`生成失败: ${data.error || "未知错误"}`);
+      setGeneratingChapterId(null);
+      setGenerationProgress(0);
+      setIsGeneratingStructure(false); // Reset global structure generation state
+      setActiveVolumeForChapters(null);
     });
 
     return () => {
@@ -100,63 +183,187 @@ export default function ChapterGenerator({ novelId, volumes, outline, onUpdate }
   }, [novelId, onUpdate]);
 
   // Structure Generation Handlers
-  const handleStartGeneration = () => {
+  // Volume Structure Generation
+  const handleOpenVolumeSettings = () => {
     if (!outline) {
-      toast.error('请先生成并选定一个大纲版本');
+      toast.error("请先生成并选定一个大纲版本");
       return;
     }
+    setVolumeAdditionalRequirements("");
+    setIsVolumeSettingsModalOpen(true);
+  };
+
+  const handleGenerateVolumes = async () => {
+    setIsVolumeSettingsModalOpen(false);
+    setIsGeneratingStructure(true);
+    try {
+      const res = await tasksAPI.generateVolumes(novelId, {
+        outline: outline || "",
+        additionalRequirements: volumeAdditionalRequirements,
+      });
+      const taskId = res.data?.id;
+      if (taskId && socket) {
+        socket.emit("subscribe:task", taskId);
+      }
+      toast.success("分卷规划任务已提交");
+    } catch (error) {
+      setIsGeneratingStructure(false);
+    }
+  };
+
+  // Per-Volume Chapter Generation
+  const [activeVolumeForChapters, setActiveVolumeForChapters] =
+    useState<Volume | null>(null);
+
+  const handleStartChapterPlanning = (volume: Volume) => {
+    setActiveVolumeForChapters(volume);
     setIsSettingsModalOpen(true);
   };
 
+  // Volume inline-edit handlers
+  const handleEditVolume = (volume: Volume) => {
+    setEditingVolumeId(volume.id);
+    setEditVolumeTitle(volume.title);
+    setEditVolumeSummary(volume.summary || "");
+  };
+
+  const handleCancelEditVolume = () => {
+    setEditingVolumeId(null);
+  };
+
+  const handleSaveVolumeEdit = async (volume: Volume) => {
+    setIsSavingVolumeEdit(true);
+    try {
+      await tasksAPI.updateVolume(novelId, volume.id, {
+        title: editVolumeTitle,
+        summary: editVolumeSummary,
+      });
+      toast.success("分卷信息已更新");
+      setEditingVolumeId(null);
+      onUpdate();
+    } catch {
+      toast.error("更新失败");
+    } finally {
+      setIsSavingVolumeEdit(false);
+    }
+  };
+
+  const handleDeleteVolume = async (volume: Volume) => {
+    if (
+      !confirm(`确认删除《${volume.title}》？该分卷下的所有章节也将一并删除。`)
+    )
+      return;
+    try {
+      await tasksAPI.deleteVolume(novelId, volume.id);
+      toast.success("分卷已删除");
+      onUpdate();
+    } catch {
+      toast.error("删除失败");
+    }
+  };
+
+  // Chapter inline-edit handlers
+  const handleEditChapterInline = (chapter: Chapter) => {
+    setEditingChapterId(chapter.id);
+    setEditChapterTitle(chapter.title);
+    setEditChapterOutline(chapter.outline || "");
+  };
+
+  const handleCancelEditChapterInline = () => {
+    setEditingChapterId(null);
+  };
+
+  const handleSaveChapterEdit = async (chapter: Chapter) => {
+    setIsSavingChapterEdit(true);
+    try {
+      await tasksAPI.updateChapter(chapter.id, {
+        title: editChapterTitle,
+        outline: editChapterOutline,
+      });
+      toast.success("章节信息已更新");
+      setEditingChapterId(null);
+      onUpdate();
+    } catch {
+      toast.error("更新失败");
+    } finally {
+      setIsSavingChapterEdit(false);
+    }
+  };
+
+  const handleDeleteChapter = async (chapter: Chapter) => {
+    if (!confirm(`确认删除《${chapter.title}》？该操作不可恢复。`)) return;
+    try {
+      await tasksAPI.deleteChapter(chapter.id);
+      toast.success("章节已删除");
+      onUpdate();
+    } catch {
+      toast.error("删除失败");
+    }
+  };
+
   const handleConfirmGeneration = async () => {
+    if (!activeVolumeForChapters) return;
+    const volumeId = activeVolumeForChapters.id;
+    setDraftVolumeId(volumeId); // Save before clearing
     setIsSettingsModalOpen(false);
     setIsGeneratingStructure(true);
     try {
-      await tasksAPI.generateChapters(novelId, { 
-        outline,
-        additionalRequirements 
+      const res = await tasksAPI.generateChapters(novelId, {
+        outline: outline || "",
+        volumeId,
+        additionalRequirements,
+        targetCount,
       });
-      toast.success('章节结构生成任务已提交');
+      const taskId = res.data?.id;
+      if (taskId && socket) {
+        socket.emit("subscribe:task", taskId);
+      }
+      toast.success(`${activeVolumeForChapters.title} 的章节生成任务已提交`);
     } catch (error) {
-      console.error('Failed to generate chapters:', error);
-      toast.error('生成请求失败');
+      console.error("Failed to generate chapters:", error);
+      toast.error("生成请求失败");
       setIsGeneratingStructure(false);
+      setActiveVolumeForChapters(null);
     }
   };
 
   // Single Chapter Generation
   const handleGenerateChapter = async (chapter: Chapter) => {
     setActiveChapterForConfig(chapter);
-    setContentOutline(chapter.detailOutline || chapter.outline || '');
-    setContentInstructions('');
+    setContentOutline(chapter.detailOutline || chapter.outline || "");
+    setContentInstructions("");
   };
 
   const handleConfirmContentGeneration = async () => {
     if (!activeChapterForConfig) return;
-    
+
     const chapterId = activeChapterForConfig.id;
     setActiveChapterForConfig(null); // Close modal
-    
+
     setGeneratingChapterId(chapterId);
     setGenerationProgress(0);
-    setGenerationStatus('准备生成...');
+    setGenerationStatus("准备生成...");
 
     try {
-      await tasksAPI.generateChapterContent(novelId, chapterId, {
+      const res = await tasksAPI.generateChapterContent(novelId, chapterId, {
         modifiedOutline: contentOutline,
-        additionalInstructions: contentInstructions
+        additionalInstructions: contentInstructions,
       });
-      toast.success('章节生成任务已提交');
+      const taskId = res.data?.id;
+      if (taskId && socket) {
+        socket.emit("subscribe:task", taskId);
+      }
+      toast.success("章节生成任务已提交");
     } catch (error) {
-      console.error('Failed to generate chapter:', error);
-      toast.error('生成请求失败');
+      console.error("Failed to generate chapter:", error);
+      toast.error("生成请求失败");
       setGeneratingChapterId(null);
     }
   };
 
   const handlePreviewChapter = (chapter: Chapter) => {
     setSelectedChapter(chapter);
-    setEditContent(chapter.content || '');
+    setEditContent(chapter.content || "");
     setIsEditing(false);
     setIsPreviewOpen(true);
   };
@@ -172,11 +379,11 @@ export default function ChapterGenerator({ novelId, volumes, outline, onUpdate }
     if (generatingChapterId === chapterId) {
       return <Loader2 className="w-5 h-5 text-primary-500 animate-spin" />;
     }
-    
+
     switch (status) {
-      case 'completed':
+      case "completed":
         return <CheckCircle className="w-5 h-5 text-green-500" />;
-      case 'failed':
+      case "failed":
         return <XCircle className="w-5 h-5 text-red-500" />;
       default:
         return null;
@@ -185,14 +392,14 @@ export default function ChapterGenerator({ novelId, volumes, outline, onUpdate }
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed':
-        return 'text-green-600 dark:text-green-400';
-      case 'generating':
-        return 'text-primary-600 dark:text-primary-400';
-      case 'failed':
-        return 'text-red-600 dark:text-red-400';
+      case "completed":
+        return "text-green-600 dark:text-green-400";
+      case "generating":
+        return "text-primary-600 dark:text-primary-400";
+      case "failed":
+        return "text-red-600 dark:text-red-400";
       default:
-        return 'text-gray-600 dark:text-gray-400';
+        return "text-gray-600 dark:text-gray-400";
     }
   };
 
@@ -201,192 +408,568 @@ export default function ChapterGenerator({ novelId, volumes, outline, onUpdate }
       {volumes.length === 0 ? (
         <Card>
           <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-             <div className="mb-4">
-               <p className="text-lg font-medium mb-2">暂无章节</p>
-               <p className="text-sm">根据当前大纲生成分卷和章节结构</p>
-             </div>
-             {outline ? (
-               <Button 
-                 onClick={handleStartGeneration} 
-                 disabled={isGeneratingStructure}
-               >
-                 {isGeneratingStructure ? (
-                   <>
-                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                     正在生成结构...
-                   </>
-                 ) : (
-                   <>
-                     <Sparkles className="w-4 h-4 mr-2" />
-                     生成章节结构
-                   </>
-                 )}
-               </Button>
-             ) : (
-               <p className="text-amber-500">请先在&quot;大纲&quot;标签页生成并锁定一个大纲</p>
-             )}
+            <div className="mb-4">
+              <p className="text-lg font-medium mb-2">暂无章节</p>
+              <p className="text-sm">根据当前大纲生成分卷和章节结构</p>
+            </div>
+            {outline ? (
+              <Button
+                onClick={handleOpenVolumeSettings}
+                disabled={isGeneratingStructure}
+              >
+                {isGeneratingStructure ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    正在规划全书分卷...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    第一步：生成全书分卷规划
+                  </>
+                )}
+              </Button>
+            ) : (
+              <p className="text-amber-500">
+                请先在&quot;大纲&quot;标签页生成并锁定一个大纲
+              </p>
+            )}
           </div>
         </Card>
       ) : (
         <div className="space-y-6">
           <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              章节列表 ({volumes.reduce((acc, v) => acc + v.chapters.length, 0)} 章)
+              分卷与章节结构
             </h3>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleStartGeneration}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenVolumeSettings}
               disabled={isGeneratingStructure}
-              className="text-primary-600 border-primary-200 hover:bg-primary-50 dark:border-primary-800 dark:hover:bg-primary-900/20"
+              className="text-primary-600 border-primary-200 hover:bg-primary-50 dark:border-primary-800 dark:hover:bg-primary-900/20 min-w-[120px]"
             >
-              <Sparkles className="w-4 h-4 mr-2" />
-              重新生成结构
+              {isGeneratingStructure ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  规划中...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  重新规划分卷
+                </>
+              )}
             </Button>
           </div>
-          
+
           {volumes.map((volume) => (
-            <Card key={volume.id} className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                  {volume.title}
-                </h3>
-                <span className="text-sm font-medium text-gray-500 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
-                  {volume.chapters.filter(c => c.status === 'completed').length} / {volume.chapters.length} 已完成
-                </span>
-              </div>
-              <div className="space-y-3">
-              {volume.chapters.map((chapter) => (
-                <div
-                  key={chapter.id}
-                  className="p-4 glass rounded-lg hover:shadow-md transition"
-                >
-                  <div className="flex flex-col gap-3">
-                    {/* Header Row */}
-                    <div className="flex items-start justify-between gap-4">
-                      {/* Left: Title & Meta */}
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span className="flex-shrink-0 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
-                          第 {chapter.order} 章
-                        </span>
-                        <h4 className="font-semibold text-gray-900 dark:text-white truncate" title={chapter.title}>
-                          {chapter.title}
-                        </h4>
-                        {getStatusIcon(chapter.status, chapter.id)}
-                      </div>
-
-                      {/* Right: Actions */}
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                         {chapter.status === 'completed' && (
-                           <Button
-                             variant="ghost"
-                             size="sm"
-                             className="h-8"
-                             onClick={() => handlePreviewChapter(chapter)}
-                           >
-                             <Eye className="w-4 h-4 mr-1" />
-                             预览
-                           </Button>
-                         )}
-
-                         {generatingChapterId === chapter.id ? (
-                          <Button variant="ghost" size="sm" disabled className="h-8">
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            生成中
-                          </Button>
+            <Card
+              key={volume.id}
+              className="p-6 border-l-4 border-l-primary-500"
+            >
+              <div className="flex items-start justify-between mb-4">
+                {editingVolumeId === volume.id ? (
+                  // === Inline Edit Mode ===
+                  <div className="flex-grow space-y-2 pr-2">
+                    <input
+                      value={editVolumeTitle}
+                      onChange={(e) => setEditVolumeTitle(e.target.value)}
+                      className="w-full text-xl font-bold bg-transparent border-b border-primary-400 focus:outline-none text-gray-900 dark:text-white pb-1"
+                      placeholder="分卷名称"
+                    />
+                    <textarea
+                      value={editVolumeSummary}
+                      onChange={(e) => setEditVolumeSummary(e.target.value)}
+                      className="w-full text-xs bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded p-2 focus:outline-none resize-none"
+                      rows={3}
+                      placeholder="分卷剧情摘要"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="h-7"
+                        onClick={() => handleSaveVolumeEdit(volume)}
+                        disabled={isSavingVolumeEdit}
+                      >
+                        {isSavingVolumeEdit ? (
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                         ) : (
-                          <>
-                            {chapter.status !== 'completed' && (
-                              <Button
-                                size="sm"
-                                className="h-8"
-                                onClick={() => handleGenerateChapter(chapter)}
-                              >
-                                <Sparkles className="w-4 h-4 mr-1" />
-                                {chapter.status === 'failed' ? '重试' : '生成正文'}
-                              </Button>
-                            )}
-                            
-                            <Button 
-                              variant="secondary" 
-                              size="sm" 
-                              className="h-8"
-                              onClick={() => handleEditChapter(chapter)}
-                            >
-                              <Edit2 className="w-4 h-4 mr-1" />
-                              编辑
-                            </Button>
-                          </>
+                          <Save className="w-3 h-3 mr-1" />
                         )}
-                      </div>
+                        保存
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7"
+                        onClick={handleCancelEditVolume}
+                      >
+                        <X className="w-3 h-3 mr-1" />
+                        取消
+                      </Button>
                     </div>
-
-                    {/* Body: Summary */}
-                    {chapter.outline && (
-                      <div className="bg-gray-50/50 dark:bg-gray-800/50 p-3 rounded-md border border-gray-100 dark:border-gray-800">
-                        <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed text-justify">
-                          {chapter.outline}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Footer: Status */}
-                    <div className="flex items-center justify-between text-xs text-gray-500 border-t border-gray-100 dark:border-gray-800 pt-3 mt-1">
-                      <div className="flex items-center gap-4">
-                        {chapter.wordCount > 0 && (
-                           <span>字数: {chapter.wordCount.toLocaleString()}</span>
-                        )}
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-medium ${
-                          chapter.status === 'completed' ? 'bg-green-100 text-green-700' :
-                          chapter.status === 'generating' ? 'bg-blue-100 text-blue-700' :
-                          chapter.status === 'failed' ? 'bg-red-100 text-red-700' :
-                          'bg-gray-100 text-gray-600'
-                        }`}>
-                          {chapter.status === 'completed' && '已完成'}
-                          {chapter.status === 'generating' && '生成中'}
-                          {chapter.status === 'failed' && '生成失败'}
-                          {chapter.status === 'pending' && '待生成'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Generation Progress Bar */}
-                    {generatingChapterId === chapter.id && (
-                      <div className="mt-2 space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-gray-600 dark:text-gray-400">
-                            {generationStatus}
-                          </span>
-                          <span className="text-primary-600 dark:text-primary-400">
-                            {generationProgress}%
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                          <div
-                            className="bg-primary-500 h-1.5 rounded-full transition-all duration-300"
-                            style={{ width: `${generationProgress}%` }}
-                          />
-                        </div>
-                      </div>
+                  </div>
+                ) : (
+                  // === Display Mode ===
+                  <div className="space-y-1 pr-4 flex-grow">
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center">
+                      <Book className="w-5 h-5 mr-2 text-primary-500" />
+                      {volume.title}
+                    </h3>
+                    {volume.summary && (
+                      <p
+                        className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 italic"
+                        title={volume.summary}
+                      >
+                        [剧情摘要]: {volume.summary}
+                      </p>
                     )}
                   </div>
+                )}
+                <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                  <span className="text-xs font-medium text-gray-500 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full whitespace-nowrap">
+                    {
+                      volume.chapters.filter((c) => c.status === "completed")
+                        .length
+                    }{" "}
+                    / {volume.chapters.length} 已完成
+                  </span>
+                  {editingVolumeId !== volume.id && (
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-gray-500 hover:text-primary-600"
+                        onClick={() => handleEditVolume(volume)}
+                        title="编辑分卷"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-gray-500 hover:text-red-600"
+                        onClick={() => handleDeleteVolume(volume)}
+                        title="删除分卷"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          </Card>
+              </div>
+              <div className="space-y-3">
+                {volume.chapters.map((chapter) => (
+                  <div
+                    key={chapter.id}
+                    className="p-4 glass rounded-lg hover:shadow-md transition"
+                  >
+                    <div className="flex flex-col gap-3">
+                      {/* Header Row */}
+                      <div className="flex items-start justify-between gap-4">
+                        {/* Left: Title & Meta / Edit UI */}
+                        {editingChapterId === chapter.id ? (
+                          <div className="flex-grow space-y-2 pr-2">
+                            <input
+                              value={editChapterTitle}
+                              onChange={(e) =>
+                                setEditChapterTitle(e.target.value)
+                              }
+                              className="w-full text-base font-bold bg-transparent border-b border-primary-400 focus:outline-none text-gray-900 dark:text-white pb-1"
+                              placeholder="章节名称"
+                            />
+                            <textarea
+                              value={editChapterOutline}
+                              onChange={(e) =>
+                                setEditChapterOutline(e.target.value)
+                              }
+                              className="w-full text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded p-2 focus:outline-none resize-none"
+                              rows={3}
+                              placeholder="章节简介"
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                className="h-7"
+                                onClick={() => handleSaveChapterEdit(chapter)}
+                                disabled={isSavingChapterEdit}
+                              >
+                                {isSavingChapterEdit ? (
+                                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                ) : (
+                                  <Save className="w-3 h-3 mr-1" />
+                                )}
+                                保存
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7"
+                                onClick={handleCancelEditChapterInline}
+                              >
+                                <X className="w-3 h-3 mr-1" />
+                                取消
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-3 min-w-0 flex-grow pt-1">
+                            <span className="flex-shrink-0 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
+                              第 {chapter.order} 章
+                            </span>
+                            <h4
+                              className="font-semibold text-gray-900 dark:text-white truncate"
+                              title={chapter.title}
+                            >
+                              {chapter.title}
+                            </h4>
+                            {getStatusIcon(chapter.status, chapter.id)}
+                          </div>
+                        )}
 
+                        {/* Right: Actions */}
+                        {editingChapterId !== chapter.id && (
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {chapter.status === "completed" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 shadow-sm border border-gray-200 dark:border-gray-800"
+                                onClick={() => handlePreviewChapter(chapter)}
+                              >
+                                <Eye className="w-4 h-4 mr-1" />
+                                预览
+                              </Button>
+                            )}
+
+                            {generatingChapterId === chapter.id ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled
+                                className="h-8"
+                              >
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                生成中
+                              </Button>
+                            ) : (
+                              <>
+                                {chapter.status !== "completed" && (
+                                  <Button
+                                    size="sm"
+                                    className="h-8"
+                                    onClick={() =>
+                                      handleGenerateChapter(chapter)
+                                    }
+                                  >
+                                    <Sparkles className="w-4 h-4 mr-1" />
+                                    {chapter.status === "failed"
+                                      ? "重试"
+                                      : "生成正文"}
+                                  </Button>
+                                )}
+
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  className="h-8 bg-secondary-100 text-secondary-700 hover:bg-secondary-200 dark:bg-secondary-900/40 dark:text-secondary-300 border-secondary-200 dark:border-secondary-800"
+                                  onClick={() => handleEditChapter(chapter)}
+                                >
+                                  <FileText className="w-4 h-4 mr-1" />
+                                  编辑器
+                                </Button>
+
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 text-gray-500 hover:text-primary-600 px-2"
+                                  onClick={() =>
+                                    handleEditChapterInline(chapter)
+                                  }
+                                  title="修改标题与简介"
+                                >
+                                  <Settings2 className="w-4 h-4" />
+                                </Button>
+
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 px-2"
+                                  onClick={() => handleDeleteChapter(chapter)}
+                                  title="删除章节"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Body: Summary */}
+                      {editingChapterId !== chapter.id && chapter.outline && (
+                        <div className="bg-gray-50/50 dark:bg-gray-800/50 p-3 rounded-md border border-gray-100 dark:border-gray-800">
+                          <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed text-justify">
+                            {chapter.outline}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Footer: Status */}
+                      <div className="flex items-center justify-between text-xs text-gray-500 border-t border-gray-100 dark:border-gray-800 pt-3 mt-1">
+                        <div className="flex items-center gap-4">
+                          {chapter.wordCount > 0 && (
+                            <span>
+                              字数: {chapter.wordCount.toLocaleString()}
+                            </span>
+                          )}
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-medium ${
+                              chapter.status === "completed"
+                                ? "bg-green-100 text-green-700"
+                                : chapter.status === "generating"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : chapter.status === "failed"
+                                    ? "bg-red-100 text-red-700"
+                                    : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            {chapter.status === "completed" && "已完成"}
+                            {chapter.status === "generating" && "生成中"}
+                            {chapter.status === "failed" && "生成失败"}
+                            {chapter.status === "pending" && "待生成"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Generation Progress Bar */}
+                      {generatingChapterId === chapter.id && (
+                        <div className="mt-2 space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-gray-600 dark:text-gray-400">
+                              {generationStatus}
+                            </span>
+                            <span className="text-primary-600 dark:text-primary-400">
+                              {generationProgress}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                            <div
+                              className="bg-primary-500 h-1.5 rounded-full transition-all duration-300"
+                              style={{ width: `${generationProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {/* === Prominent "Continue Generating" Button at the bottom === */}
+                <button
+                  onClick={() => handleStartChapterPlanning(volume)}
+                  disabled={isGeneratingStructure}
+                  className={cn(
+                    "w-full py-8 px-6 rounded-xl border-2 border-dashed transition-all flex flex-col items-center justify-center gap-3 group",
+                    isGeneratingStructure &&
+                      activeVolumeForChapters?.id === volume.id
+                      ? "bg-primary-50/30 border-primary-200 cursor-wait"
+                      : "bg-gray-50/50 border-gray-200 hover:border-primary-400 hover:bg-primary-50/30 dark:bg-gray-900/30 dark:border-gray-800 dark:hover:border-primary-500",
+                  )}
+                >
+                  {isGeneratingStructure &&
+                  activeVolumeForChapters?.id === volume.id ? (
+                    <>
+                      <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+                      <div className="text-center">
+                        <p className="text-lg font-bold text-primary-700 dark:text-primary-300">
+                          {generationStatus}
+                        </p>
+                        <p className="text-sm text-primary-500">
+                          正在为您精心规划后续剧情结构...
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-12 h-12 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <Sparkles className="w-6 h-6 text-primary-600 dark:text-primary-400" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-bold text-gray-900 dark:text-white group-hover:text-primary-600 transition-colors">
+                          继续生成更多章节
+                        </p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                          基于小说大纲与当前剧情，自动规划并填充后续章节结构
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </button>
+              </div>
+            </Card>
           ))}
         </div>
       )}
 
-      {/* Generation Settings Modal (Structure) */}
+      {/* Volume Generation Settings Modal */}
+      <Modal
+        isOpen={isVolumeSettingsModalOpen}
+        onClose={() => setIsVolumeSettingsModalOpen(false)}
+        title="分卷规划设置"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              额外要求（可选）
+            </label>
+            <textarea
+              value={volumeAdditionalRequirements}
+              onChange={(e) => setVolumeAdditionalRequirements(e.target.value)}
+              placeholder="例如：把全书分为5卷，或者前期的节奏再快一些..."
+              className="w-full h-32 px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-700 bg-transparent focus:ring-2 focus:ring-primary-500 focus:outline-none resize-none"
+            />
+          </div>
+          <div className="flex justify-end space-x-3">
+            <Button
+              variant="ghost"
+              onClick={() => setIsVolumeSettingsModalOpen(false)}
+            >
+              取消
+            </Button>
+            <Button onClick={handleGenerateVolumes}>确认生成</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Volume Draft Review Modal */}
+      <Modal
+        isOpen={isVolumeDraftModalOpen}
+        onClose={() => setIsVolumeDraftModalOpen(false)}
+        title="预览并调整生成的分卷"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-amber-600 font-medium">
+            ⚠️ 注意：确认保存后，原有的所有分卷及章节都将被删除替换！
+          </p>
+          <div className="max-h-[50vh] overflow-y-auto space-y-3 p-1">
+            {draftVolumes?.map((draft, idx) => (
+              <div
+                key={idx}
+                className="flex items-start gap-2 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700"
+              >
+                <div className="flex-shrink-0 text-xs font-mono text-gray-400 mt-2">
+                  卷 {idx + 1}
+                </div>
+                <div className="flex-grow space-y-2">
+                  <input
+                    value={draft.title}
+                    onChange={(e) => {
+                      const newDrafts = [...(draftVolumes || [])];
+                      newDrafts[idx].title = e.target.value;
+                      setDraftVolumes(newDrafts);
+                    }}
+                    className="w-full font-bold bg-transparent border-none focus:ring-0 p-0 text-gray-900 dark:text-white"
+                  />
+                  <textarea
+                    value={draft.summary}
+                    onChange={(e) => {
+                      const newDrafts = [...(draftVolumes || [])];
+                      newDrafts[idx].summary = e.target.value;
+                      setDraftVolumes(newDrafts);
+                    }}
+                    className="w-full text-sm bg-transparent border-gray-200 rounded focus:ring-1 p-1 text-gray-600 dark:text-gray-400"
+                    rows={2}
+                  />
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-500 hover:text-red-700"
+                  onClick={() => {
+                    const newDrafts =
+                      draftVolumes?.filter((_, i) => i !== idx) || null;
+                    setDraftVolumes(newDrafts);
+                  }}
+                >
+                  删除
+                </Button>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-between items-center pt-4 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const newDrafts = [
+                  ...(draftVolumes || []),
+                  { title: "新卷名", summary: "分卷摘要描述" },
+                ];
+                setDraftVolumes(newDrafts);
+              }}
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              添加分卷
+            </Button>
+            <div className="space-x-3">
+              <Button
+                variant="ghost"
+                onClick={() => setIsVolumeDraftModalOpen(false)}
+              >
+                以后再说
+              </Button>
+              <Button
+                onClick={async () => {
+                  if (!draftVolumes) return;
+                  setIsSavingVolumeDraft(true);
+                  try {
+                    await tasksAPI.saveBatchVolumes(novelId, draftVolumes);
+                    toast.success("分卷已成功存入书库");
+                    setIsVolumeDraftModalOpen(false);
+                    onUpdate();
+                  } catch (e) {
+                    toast.error("保存失败");
+                  } finally {
+                    setIsSavingVolumeDraft(false);
+                  }
+                }}
+                disabled={isSavingVolumeDraft || !draftVolumes?.length}
+              >
+                {isSavingVolumeDraft ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                )}
+                确认替换并保存 ({draftVolumes?.length || 0})
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Chapter Generation Settings Modal */}
       <Modal
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
-        title="生成设置"
+        title="章节生成设置"
       >
-        {/* ... existing modal ... */}
         <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              生成章节数量 (10-50)
+            </label>
+            <input
+              type="number"
+              min={10}
+              max={50}
+              value={targetCount}
+              onChange={(e) => setTargetCount(parseInt(e.target.value) || 30)}
+              className="w-full px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-700 bg-transparent focus:ring-2 focus:ring-primary-500 focus:outline-none"
+            />
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               额外要求（可选）
@@ -394,17 +977,133 @@ export default function ChapterGenerator({ novelId, volumes, outline, onUpdate }
             <textarea
               value={additionalRequirements}
               onChange={(e) => setAdditionalRequirements(e.target.value)}
-              placeholder="例如：希望能多一些打斗场面，或者把第一卷控制在50章以内..."
+              placeholder="例如：希望能多一些打斗场面，或者注重某个人物的成长..."
               className="w-full h-32 px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-700 bg-transparent focus:ring-2 focus:ring-primary-500 focus:outline-none resize-none"
             />
           </div>
           <div className="flex justify-end space-x-3">
-            <Button variant="ghost" onClick={() => setIsSettingsModalOpen(false)}>
+            <Button
+              variant="ghost"
+              onClick={() => setIsSettingsModalOpen(false)}
+            >
               取消
             </Button>
-            <Button onClick={handleConfirmGeneration}>
-              开始生成
+            <Button onClick={handleConfirmGeneration}>确认生成</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Draft Review Modal */}
+      <Modal
+        isOpen={isDraftModalOpen}
+        onClose={() => setIsDraftModalOpen(false)}
+        title="预览并调整生成的章节"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            AI
+            已为您生成以下章节建议。您可以修改标题、删除不需要的章节，确认后将保存到书库。
+          </p>
+          <div className="max-h-[50vh] overflow-y-auto space-y-3 p-1">
+            {draftChapters?.map((draft, idx) => (
+              <div
+                key={idx}
+                className="flex items-start gap-2 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700"
+              >
+                <div className="flex-shrink-0 text-xs font-mono text-gray-400 mt-2">
+                  #{idx + 1}
+                </div>
+                <div className="flex-grow space-y-2">
+                  <input
+                    value={draft.title}
+                    onChange={(e) => {
+                      const newDrafts = [...(draftChapters || [])];
+                      newDrafts[idx].title = e.target.value;
+                      setDraftChapters(newDrafts);
+                    }}
+                    className="w-full font-medium bg-transparent border-none focus:ring-0 p-0 text-gray-900 dark:text-white"
+                  />
+                  <textarea
+                    value={draft.summary}
+                    onChange={(e) => {
+                      const newDrafts = [...(draftChapters || [])];
+                      newDrafts[idx] = {
+                        ...newDrafts[idx],
+                        summary: e.target.value,
+                      };
+                      setDraftChapters(newDrafts);
+                    }}
+                    className="w-full text-xs text-gray-500 bg-transparent border border-gray-200 dark:border-gray-700 rounded p-1 focus:outline-none resize-none"
+                    rows={2}
+                  />
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-500 hover:text-red-700"
+                  onClick={() => {
+                    const newDrafts =
+                      draftChapters?.filter((_, i) => i !== idx) || null;
+                    setDraftChapters(newDrafts);
+                  }}
+                >
+                  删除
+                </Button>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-between items-center pt-4 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const newDrafts = [
+                  ...(draftChapters || []),
+                  { title: "新章节", summary: "待完善" },
+                ];
+                setDraftChapters(newDrafts);
+              }}
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              添加章节
             </Button>
+            <div className="space-x-3">
+              <Button
+                variant="ghost"
+                onClick={() => setIsDraftModalOpen(false)}
+              >
+                以后再说
+              </Button>
+              <Button
+                onClick={async () => {
+                  if (!draftVolumeId || !draftChapters) return;
+                  setIsSavingDraft(true);
+                  try {
+                    await tasksAPI.saveBatchChapters(
+                      novelId,
+                      draftVolumeId,
+                      draftChapters,
+                    );
+                    toast.success("章节已成功存入书库");
+                    setIsDraftModalOpen(false);
+                    onUpdate();
+                  } catch (e) {
+                    toast.error("保存失败");
+                  } finally {
+                    setIsSavingDraft(false);
+                  }
+                }}
+                disabled={isSavingDraft || !draftChapters?.length}
+              >
+                {isSavingDraft ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                )}
+                确认并保存 ({draftChapters?.length || 0})
+              </Button>
+            </div>
           </div>
         </div>
       </Modal>
@@ -428,7 +1127,7 @@ export default function ChapterGenerator({ novelId, volumes, outline, onUpdate }
               placeholder="在此处优化章节大纲..."
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               写作指导/额外要求
@@ -442,7 +1141,10 @@ export default function ChapterGenerator({ novelId, volumes, outline, onUpdate }
           </div>
 
           <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-gray-800">
-            <Button variant="ghost" onClick={() => setActiveChapterForConfig(null)}>
+            <Button
+              variant="ghost"
+              onClick={() => setActiveChapterForConfig(null)}
+            >
               取消
             </Button>
             <Button onClick={handleConfirmContentGeneration}>
@@ -457,7 +1159,7 @@ export default function ChapterGenerator({ novelId, volumes, outline, onUpdate }
       <Modal
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
-        title={selectedChapter?.title || '章节预览'}
+        title={selectedChapter?.title || "章节预览"}
         size="lg"
       >
         {selectedChapter && (
@@ -478,11 +1180,16 @@ export default function ChapterGenerator({ novelId, volumes, outline, onUpdate }
               ) : (
                 <div className="prose prose-sm dark:prose-invert max-w-none">
                   {selectedChapter.content ? (
-                     selectedChapter.content.split('\n\n').map((paragraph, i) => (
-                      <p key={i} className="mb-4 leading-relaxed text-justify indent-8">
-                        {paragraph}
-                      </p>
-                    ))
+                    selectedChapter.content
+                      .split("\n\n")
+                      .map((paragraph, i) => (
+                        <p
+                          key={i}
+                          className="mb-4 leading-relaxed text-justify indent-8"
+                        >
+                          {paragraph}
+                        </p>
+                      ))
                   ) : (
                     <p className="text-gray-500 text-center py-8">暂无内容</p>
                   )}
@@ -504,7 +1211,11 @@ export default function ChapterGenerator({ novelId, volumes, outline, onUpdate }
                 </Button>
                 {isEditing ? (
                   <>
-                    <Button variant="outline" onClick={() => setIsEditing(false)} disabled={isSaving}>
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsEditing(false)}
+                      disabled={isSaving}
+                    >
                       取消
                     </Button>
                     <Button onClick={handleSaveChapter} disabled={isSaving}>

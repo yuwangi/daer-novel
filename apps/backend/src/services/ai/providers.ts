@@ -164,6 +164,7 @@ export class OpenAIProvider extends BaseAIProvider {
     this.client = new OpenAI({
       apiKey: config.apiKey,
       baseURL: config.baseUrl,
+      timeout: 300000, // 5 minutes
     });
   }
 
@@ -296,6 +297,7 @@ export class DeepSeekProvider extends BaseAIProvider {
           Authorization: `Bearer ${this.config.apiKey}`,
           "Content-Type": "application/json",
         },
+        timeout: 300000, // 5 minutes
       },
     );
 
@@ -326,6 +328,7 @@ export class DeepSeekProvider extends BaseAIProvider {
           "Content-Type": "application/json",
         },
         responseType: "stream",
+        timeout: 300000, // 5 minutes
       },
     );
 

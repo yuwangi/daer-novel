@@ -1,23 +1,23 @@
-import { Router } from 'express';
-import { AuthRequest } from '../middleware/auth';
-import { db, schema } from '../database';
-import { eq, desc } from 'drizzle-orm';
-import { createAIProvider } from '../services/ai/ai-config';
-import { OocAgent } from '../services/ai/agents';
+import { Router } from "express";
+import { AuthRequest } from "../middleware/auth";
+import { db, schema } from "../database";
+import { eq, desc } from "drizzle-orm";
+import { createAIProvider } from "../services/ai/ai-config";
+import { OocAgent } from "../services/ai/agents";
 
 const router: Router = Router();
 
 // ========= Analysis & Checking Routes =========
 
 // POST /chapters/:id/ooc-check - Check text for out-of-character behavior
-router.post('/:id/ooc-check', async (req: AuthRequest, res, next) => {
+router.post("/:id/ooc-check", async (req: AuthRequest, res, next) => {
   try {
     const { id } = req.params;
     const { content } = req.body;
     const userId = req.user?.id;
 
     if (!content) {
-      res.status(400).json({ error: 'Missing content to check' });
+      res.status(400).json({ error: "Missing content to check" });
       return;
     }
 
@@ -27,7 +27,7 @@ router.post('/:id/ooc-check', async (req: AuthRequest, res, next) => {
     });
 
     if (!chapter) {
-      res.status(404).json({ error: 'Chapter not found' });
+      res.status(404).json({ error: "Chapter not found" });
       return;
     }
 
@@ -36,7 +36,7 @@ router.post('/:id/ooc-check', async (req: AuthRequest, res, next) => {
     });
 
     if (!novel) {
-      res.status(404).json({ error: 'Novel not found' });
+      res.status(404).json({ error: "Novel not found" });
       return;
     }
 
@@ -50,14 +50,16 @@ router.post('/:id/ooc-check', async (req: AuthRequest, res, next) => {
     const agent = new OocAgent(provider);
 
     const result = await agent.execute({ novel, characters }, content);
-    
+
     // Parse result JSON (we use a cleaner helper if available, but for now just parse)
     let parsedResult;
     try {
-      let cleanContent = result.content.replace(/```(?:json)?|```/gi, '').trim();
+      let cleanContent = result.content
+        .replace(/```(?:json)?|```/gi, "")
+        .trim();
       parsedResult = JSON.parse(cleanContent);
     } catch (e) {
-      parsedResult = { passed: false, issues: ['无法解析 AI 的返回结果'] };
+      parsedResult = { passed: false, issues: ["无法解析 AI 的返回结果"] };
     }
 
     res.json(parsedResult);
@@ -67,12 +69,12 @@ router.post('/:id/ooc-check', async (req: AuthRequest, res, next) => {
 });
 
 // List chapters (stub)
-router.get('/', async (_req: AuthRequest, res) => {
+router.get("/", async (_req: AuthRequest, res) => {
   res.json([]);
 });
 
 // Get single chapter
-router.get('/:id', async (req: AuthRequest, res, next) => {
+router.get("/:id", async (req: AuthRequest, res, next) => {
   try {
     const { id } = req.params;
     const chapter = await db.query.chapters.findFirst({
@@ -80,7 +82,7 @@ router.get('/:id', async (req: AuthRequest, res, next) => {
     });
 
     if (!chapter) {
-      res.status(404).json({ error: 'Chapter not found' });
+      res.status(404).json({ error: "Chapter not found" });
       return;
     }
 
@@ -91,24 +93,25 @@ router.get('/:id', async (req: AuthRequest, res, next) => {
 });
 
 // Update chapter
-router.patch('/:id', async (req: AuthRequest, res, next) => {
+router.patch("/:id", async (req: AuthRequest, res, next) => {
   try {
     const { id } = req.params;
-    const { title, content } = req.body;
+    const { title, content, outline } = req.body;
 
     const [chapter] = await db
       .update(schema.chapters)
-      .set({ 
-        title, 
+      .set({
+        title,
         content,
+        outline,
         wordCount: content ? content.length : undefined,
-        updatedAt: new Date() 
+        updatedAt: new Date(),
       })
       .where(eq(schema.chapters.id, id))
       .returning();
 
     if (!chapter) {
-      res.status(404).json({ error: 'Chapter not found' });
+      res.status(404).json({ error: "Chapter not found" });
       return;
     }
 
@@ -119,7 +122,7 @@ router.patch('/:id', async (req: AuthRequest, res, next) => {
 });
 
 // Delete chapter
-router.delete('/:id', async (req: AuthRequest, res, next) => {
+router.delete("/:id", async (req: AuthRequest, res, next) => {
   try {
     const { id } = req.params;
     await db.delete(schema.chapters).where(eq(schema.chapters.id, id));
@@ -132,7 +135,7 @@ router.delete('/:id', async (req: AuthRequest, res, next) => {
 // ========= Snapshot (Version History) Routes =========
 
 // GET /chapters/:id/snapshots - list all snapshots (without content for speed)
-router.get('/:id/snapshots', async (req: AuthRequest, res, next) => {
+router.get("/:id/snapshots", async (req: AuthRequest, res, next) => {
   try {
     const { id } = req.params;
     const snapshots = await db.query.chapterSnapshots.findMany({
@@ -156,18 +159,20 @@ router.get('/:id/snapshots', async (req: AuthRequest, res, next) => {
 });
 
 // POST /chapters/:id/snapshots - create a manual snapshot
-router.post('/:id/snapshots', async (req: AuthRequest, res, next) => {
+router.post("/:id/snapshots", async (req: AuthRequest, res, next) => {
   try {
     const { id } = req.params;
     const { label } = req.body;
 
-    const chapter = await db.query.chapters.findFirst({ where: eq(schema.chapters.id, id) });
+    const chapter = await db.query.chapters.findFirst({
+      where: eq(schema.chapters.id, id),
+    });
     if (!chapter || !chapter.content) {
-      res.status(404).json({ error: 'Chapter not found or empty' });
+      res.status(404).json({ error: "Chapter not found or empty" });
       return;
     }
 
-    // Limit to 30 snapshots per chapter 
+    // Limit to 30 snapshots per chapter
     const existing = await db.query.chapterSnapshots.findMany({
       where: eq(schema.chapterSnapshots.chapterId, id),
       orderBy: [desc(schema.chapterSnapshots.createdAt)],
@@ -175,18 +180,23 @@ router.post('/:id/snapshots', async (req: AuthRequest, res, next) => {
     if (existing.length >= 30) {
       const toDelete = existing.slice(29);
       for (const snap of toDelete) {
-        await db.delete(schema.chapterSnapshots).where(eq(schema.chapterSnapshots.id, snap.id));
+        await db
+          .delete(schema.chapterSnapshots)
+          .where(eq(schema.chapterSnapshots.id, snap.id));
       }
     }
 
-    const [snapshot] = await db.insert(schema.chapterSnapshots).values({
-      chapterId: id,
-      novelId: chapter.novelId,
-      content: chapter.content,
-      title: chapter.title,
-      wordCount: chapter.wordCount ?? 0,
-      label: label ?? '手动快照',
-    }).returning();
+    const [snapshot] = await db
+      .insert(schema.chapterSnapshots)
+      .values({
+        chapterId: id,
+        novelId: chapter.novelId,
+        content: chapter.content,
+        title: chapter.title,
+        wordCount: chapter.wordCount ?? 0,
+        label: label ?? "手动快照",
+      })
+      .returning();
 
     res.status(201).json(snapshot);
   } catch (error) {
@@ -195,69 +205,87 @@ router.post('/:id/snapshots', async (req: AuthRequest, res, next) => {
 });
 
 // GET /chapters/:id/snapshots/:snapshotId - get single snapshot with content
-router.get('/:id/snapshots/:snapshotId', async (req: AuthRequest, res, next) => {
-  try {
-    const { snapshotId } = req.params;
-    const snapshot = await db.query.chapterSnapshots.findFirst({
-      where: eq(schema.chapterSnapshots.id, snapshotId),
-    });
-    if (!snapshot) {
-      res.status(404).json({ error: 'Snapshot not found' });
-      return;
+router.get(
+  "/:id/snapshots/:snapshotId",
+  async (req: AuthRequest, res, next) => {
+    try {
+      const { snapshotId } = req.params;
+      const snapshot = await db.query.chapterSnapshots.findFirst({
+        where: eq(schema.chapterSnapshots.id, snapshotId),
+      });
+      if (!snapshot) {
+        res.status(404).json({ error: "Snapshot not found" });
+        return;
+      }
+      res.json(snapshot);
+    } catch (error) {
+      next(error);
     }
-    res.json(snapshot);
-  } catch (error) {
-    next(error);
-  }
-});
+  },
+);
 
 // POST /chapters/:id/snapshots/:snapshotId/restore - restore a snapshot
-router.post('/:id/snapshots/:snapshotId/restore', async (req: AuthRequest, res, next) => {
-  try {
-    const { id, snapshotId } = req.params;
+router.post(
+  "/:id/snapshots/:snapshotId/restore",
+  async (req: AuthRequest, res, next) => {
+    try {
+      const { id, snapshotId } = req.params;
 
-    const snapshot = await db.query.chapterSnapshots.findFirst({
-      where: eq(schema.chapterSnapshots.id, snapshotId),
-    });
-    if (!snapshot) {
-      res.status(404).json({ error: 'Snapshot not found' });
-      return;
-    }
-
-    // Auto-save current state as snapshot before restoring
-    const currentChapter = await db.query.chapters.findFirst({ where: eq(schema.chapters.id, id) });
-    if (currentChapter?.content) {
-      await db.insert(schema.chapterSnapshots).values({
-        chapterId: id,
-        novelId: currentChapter.novelId,
-        content: currentChapter.content,
-        title: currentChapter.title,
-        wordCount: currentChapter.wordCount ?? 0,
-        label: '还原前自动保存',
+      const snapshot = await db.query.chapterSnapshots.findFirst({
+        where: eq(schema.chapterSnapshots.id, snapshotId),
       });
+      if (!snapshot) {
+        res.status(404).json({ error: "Snapshot not found" });
+        return;
+      }
+
+      // Auto-save current state as snapshot before restoring
+      const currentChapter = await db.query.chapters.findFirst({
+        where: eq(schema.chapters.id, id),
+      });
+      if (currentChapter?.content) {
+        await db.insert(schema.chapterSnapshots).values({
+          chapterId: id,
+          novelId: currentChapter.novelId,
+          content: currentChapter.content,
+          title: currentChapter.title,
+          wordCount: currentChapter.wordCount ?? 0,
+          label: "还原前自动保存",
+        });
+      }
+
+      // Restore snapshot content
+      const [updated] = await db
+        .update(schema.chapters)
+        .set({
+          content: snapshot.content,
+          wordCount: snapshot.wordCount,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.chapters.id, id))
+        .returning();
+
+      res.json({ chapter: updated, snapshot });
+    } catch (error) {
+      next(error);
     }
-
-    // Restore snapshot content
-    const [updated] = await db.update(schema.chapters)
-      .set({ content: snapshot.content, wordCount: snapshot.wordCount, updatedAt: new Date() })
-      .where(eq(schema.chapters.id, id))
-      .returning();
-
-    res.json({ chapter: updated, snapshot });
-  } catch (error) {
-    next(error);
-  }
-});
+  },
+);
 
 // DELETE /chapters/:id/snapshots/:snapshotId - delete a snapshot
-router.delete('/:id/snapshots/:snapshotId', async (req: AuthRequest, res, next) => {
-  try {
-    const { snapshotId } = req.params;
-    await db.delete(schema.chapterSnapshots).where(eq(schema.chapterSnapshots.id, snapshotId));
-    res.status(204).send();
-  } catch (error) {
-    next(error);
-  }
-});
+router.delete(
+  "/:id/snapshots/:snapshotId",
+  async (req: AuthRequest, res, next) => {
+    try {
+      const { snapshotId } = req.params;
+      await db
+        .delete(schema.chapterSnapshots)
+        .where(eq(schema.chapterSnapshots.id, snapshotId));
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 export default router;
