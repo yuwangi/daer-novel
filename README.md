@@ -68,12 +68,9 @@
 
 <summary><h2>📸 项目预览</h2></summary>
 
-
 ![主页](screenshots/home.png)
 
 ![小说详情](screenshots/index.png)
-
-![章节创作](screenshots/index1.png)
 
 ![章节创作](screenshots/index2.png)
 
@@ -86,7 +83,6 @@
 ![章节创作](screenshots/index6.png)
 
 ![章节创作](screenshots/index7.png)
-
 
 ---
 
@@ -128,24 +124,24 @@ chmod +x start.sh
 
 ### 后端技术
 
-| 技术 | 用途 |
-|------|------|
-| Express.js | 轻量级 Web 框架 |
-| PostgreSQL + pgvector | 数据库和向量检索 |
-| Drizzle ORM | 类型安全的 ORM |
-| BullMQ + Redis | 任务队列和缓存 |
-| Socket.IO | WebSocket 实时通信 |
-| Better Auth | 现代化认证框架 |
+| 技术                  | 用途               |
+| --------------------- | ------------------ |
+| Express.js            | 轻量级 Web 框架    |
+| PostgreSQL + pgvector | 数据库和向量检索   |
+| Drizzle ORM           | 类型安全的 ORM     |
+| BullMQ + Redis        | 任务队列和缓存     |
+| Socket.IO             | WebSocket 实时通信 |
+| Better Auth           | 现代化认证框架     |
 
 ### 前端技术
 
-| 技术 | 用途 |
-|------|------|
-| Next.js 14 | React 框架（App Router） |
-| TypeScript | 类型安全 |
-| Tailwind CSS | 原子化 CSS 框架 |
-| Socket.IO Client | 实时通信客户端 |
-| Tauri | 桌面端打包 |
+| 技术             | 用途                     |
+| ---------------- | ------------------------ |
+| Next.js 14       | React 框架（App Router） |
+| TypeScript       | 类型安全                 |
+| Tailwind CSS     | 原子化 CSS 框架          |
+| Socket.IO Client | 实时通信客户端           |
+| Tauri            | 桌面端打包               |
 
 ### AI 集成
 
@@ -158,15 +154,15 @@ chmod +x start.sh
 
 ## 🎯 AI 代理系统
 
-| 代理 | 功能 | 输入 | 输出 |
-|------|------|------|------|
-| **OutlineAgent** | 生成全文大纲 | 小说设定 | 完整故事大纲 |
-| **TitleAgent** | 生成书名 | 大纲 | 3-5 个书名建议 |
-| **ChapterPlanningAgent** | 章节结构规划 | 大纲 | 卷/章节结构 |
-| **ChapterOutlineAgent** | 章节大纲 | 章节信息 | 章节大纲 |
-| **ChapterDetailAgent** | 章节细纲 | 章节大纲 | 详细情节点 |
-| **ContentAgent** | 正文生成 | 细纲 | 章节正文 |
-| **ConsistencyAgent** | 一致性校验 | 生成内容 | 校验结果 |
+| 代理                     | 功能         | 输入     | 输出           |
+| ------------------------ | ------------ | -------- | -------------- |
+| **OutlineAgent**         | 生成全文大纲 | 小说设定 | 完整故事大纲   |
+| **TitleAgent**           | 生成书名     | 大纲     | 3-5 个书名建议 |
+| **ChapterPlanningAgent** | 章节结构规划 | 大纲     | 卷/章节结构    |
+| **ChapterOutlineAgent**  | 章节大纲     | 章节信息 | 章节大纲       |
+| **ChapterDetailAgent**   | 章节细纲     | 章节大纲 | 详细情节点     |
+| **ContentAgent**         | 正文生成     | 细纲     | 章节正文       |
+| **ConsistencyAgent**     | 一致性校验   | 生成内容 | 校验结果       |
 
 ---
 

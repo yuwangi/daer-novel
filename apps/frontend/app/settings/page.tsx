@@ -45,7 +45,7 @@ export default function SettingsPage() {
     apiKey: "",
     baseUrl: "https://api.openai.com/v1",
     temperature: 0.7,
-    maxTokens: 1000000,
+    maxTokens: 32768,
   });
 
   useEffect(() => {
@@ -130,7 +130,7 @@ export default function SettingsPage() {
       apiKey: config.apiKey,
       baseUrl: config.baseUrl || "",
       temperature: config.parameters?.temperature || 0.7,
-      maxTokens: config.parameters?.maxTokens || 1000000,
+      maxTokens: config.parameters?.maxTokens || 32768,
     });
     // Scroll to top of the form
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -144,7 +144,7 @@ export default function SettingsPage() {
       apiKey: "",
       baseUrl: "https://api.openai.com/v1",
       temperature: 0.7,
-      maxTokens: 1000000,
+      maxTokens: 32768,
     });
   };
 

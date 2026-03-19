@@ -30,7 +30,7 @@ async function seed() {
       baseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
       parameters: {
         temperature: 0.7,
-        maxTokens: 1000000,
+        maxTokens: 32768,
       },
       isDefault: 1,
     });

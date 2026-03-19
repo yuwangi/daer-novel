@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Loader2,
@@ -71,6 +71,8 @@ export default function ChapterGenerator({
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  const activeVolumeRef = useRef<string | null>(null);
 
   // Structure Generation State
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -146,8 +148,8 @@ export default function ChapterGenerator({
 
       if (data.type === "chapter_planning" && data.result?.chapters) {
         setDraftChapters(data.result.chapters);
-        // Keep the volumeId in a separate state so save works after activeVolumeForChapters is cleared
-        setDraftVolumeId(activeVolumeForChapters?.id || null);
+        // Use the Ref to get the correct volumeId even if the state is stale
+        setDraftVolumeId(activeVolumeRef.current);
         setIsDraftModalOpen(true);
       } else if (data.type === "volume_planning" && data.result?.volumes) {
         setDraftVolumes(data.result.volumes);
@@ -217,6 +219,7 @@ export default function ChapterGenerator({
 
   const handleStartChapterPlanning = (volume: Volume) => {
     setActiveVolumeForChapters(volume);
+    activeVolumeRef.current = volume.id;
     setIsSettingsModalOpen(true);
   };
 
@@ -304,6 +307,7 @@ export default function ChapterGenerator({
   const handleConfirmGeneration = async () => {
     if (!activeVolumeForChapters) return;
     const volumeId = activeVolumeForChapters.id;
+    activeVolumeRef.current = volumeId;
     setDraftVolumeId(volumeId); // Save before clearing
     setIsSettingsModalOpen(false);
     setIsGeneratingStructure(true);

@@ -2,7 +2,7 @@ import { db, schema } from "../../database";
 import { eq } from "drizzle-orm";
 import { AIProviderFactory, AIProviderConfig } from "./providers";
 
-export const DEFAULT_MAX_TOKENS = 1000000;
+export const DEFAULT_MAX_TOKENS = 32768;
 
 /**
  * Loads the AI config for the given userId from the database.
