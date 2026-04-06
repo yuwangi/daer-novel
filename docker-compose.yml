@@ -4,6 +4,7 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: daer-novel-postgres
+    shm_size: 128mb
     environment:
       POSTGRES_DB: daer_novel
       POSTGRES_USER: postgres
