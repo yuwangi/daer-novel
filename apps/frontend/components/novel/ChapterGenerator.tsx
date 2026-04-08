@@ -157,6 +157,19 @@ export default function ChapterGenerator({
       } else if (data.type === "content") {
         // Chapter content generated successfully
         setGeneratingChapterId(null);
+
+        // Update daily word count with generated content
+        if (data.result?.content) {
+          const generatedWords = data.result.content.length;
+          const today = new Date().toISOString().split("T")[0];
+          const key = `writing-words-${today}`;
+          const existing = parseInt(localStorage.getItem(key) || "0", 10);
+          localStorage.setItem(key, String(existing + generatedWords));
+          toast.success(
+            `已生成 ${generatedWords.toLocaleString()} 字，已计入今日统计`,
+          );
+        }
+
         onUpdate(); // refresh the list to show new content
         return; // Avoid the setTimeout below for content generation
       }
