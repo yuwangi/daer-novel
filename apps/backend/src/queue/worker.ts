@@ -372,6 +372,7 @@ export function startWorker(io: Server) {
                 content: result.content,
                 wordCount: result.content.length,
                 status: "completed",
+                updatedAt: new Date(),
               })
               .where(eq(schema.chapters.id, chapterId!));
             break;

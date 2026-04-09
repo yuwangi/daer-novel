@@ -19,6 +19,7 @@ import {
   Zap,
   Flame,
   Calendar,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -69,35 +70,65 @@ const isToday = (dateString: string): boolean => {
 export default function StatsPage() {
   const [novels, setNovels] = useState<Novel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Daily goal state
   const [dailyGoal, setDailyGoal] = useState(2000);
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState("2000");
 
-  // Load data
+  // Load data function
+  const loadData = useCallback(async (showToast = false) => {
+    if (showToast) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
+
+    try {
+      const res = await novelsAPI.list();
+      // Also fetch full novel for each to get volumes/chapters
+      const detailedNovels = await Promise.all(
+        (res.data || []).map((n: any) =>
+          novelsAPI.get(n.id).then((r) => r.data),
+        ),
+      );
+      setNovels(detailedNovels);
+
+      if (showToast) {
+        toast.success("数据已刷新");
+      }
+    } catch (e) {
+      console.error("Failed to load novels", e);
+      if (showToast) {
+        toast.error("刷新失败");
+      }
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  // Load data on mount
   useEffect(() => {
     setDailyGoal(getStoredGoal());
     setGoalInput(String(getStoredGoal()));
+    loadData();
+  }, [loadData]);
 
-    const load = async () => {
-      try {
-        const res = await novelsAPI.list();
-        // Also fetch full novel for each to get volumes/chapters
-        const detailedNovels = await Promise.all(
-          (res.data || []).map((n: any) =>
-            novelsAPI.get(n.id).then((r) => r.data),
-          ),
-        );
-        setNovels(detailedNovels);
-      } catch (e) {
-        console.error("Failed to load novels", e);
-      } finally {
-        setIsLoading(false);
+  // Refresh data when page becomes visible (user switches back to this tab)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadData();
       }
     };
-    load();
-  }, []);
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadData]);
 
   const saveGoal = () => {
     const parsed = parseInt(goalInput, 10);
@@ -165,6 +196,17 @@ export default function StatsPage() {
                   跟踪您的创作进度与写作目标，保持更新动力
                 </p>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadData(true)}
+                disabled={isRefreshing || isLoading}
+              >
+                <RefreshCw
+                  className={cn("w-4 h-4 mr-2", isRefreshing && "animate-spin")}
+                />
+                刷新
+              </Button>
             </div>
 
             {/* === Top stat cards === */}
