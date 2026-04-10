@@ -65,6 +65,7 @@ export const authAPI = {
 // Novels API
 export const novelsAPI = {
   list: () => api.get("/novels"),
+  listWithStats: () => api.get("/novels/stats/batch"),
   get: (id: string) => api.get(`/novels/${id}`),
   create: (data: any) => api.post("/novels", data),
   update: (id: string, data: any) => api.patch(`/novels/${id}`, data),
