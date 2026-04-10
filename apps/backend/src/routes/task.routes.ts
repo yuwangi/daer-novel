@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, schema } from "../database";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { AuthRequest } from "../middleware/auth";
 import { novelQueue } from "../queue/worker";
 
@@ -318,6 +318,52 @@ router.get("/tasks/:taskId", async (req: AuthRequest, res, next) => {
     });
 
     res.json(task);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get running tasks for a novel
+router.get("/:novelId/tasks/running", async (req: AuthRequest, res, next) => {
+  try {
+    const { novelId } = req.params;
+
+    // Get all running or recently failed tasks for this novel
+    const runningTasks = await db.query.tasks.findMany({
+      where: and(
+        eq(schema.tasks.novelId, novelId),
+        eq(schema.tasks.status, "running"),
+      ),
+    });
+
+    res.json(runningTasks);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get recent tasks for a specific chapter
+router.get("/:novelId/tasks/recent", async (req: AuthRequest, res, next) => {
+  try {
+    const { novelId } = req.params;
+    const { chapterId } = req.query;
+
+    if (!chapterId || typeof chapterId !== "string") {
+      res.json([]);
+      return;
+    }
+
+    const recentTasks = await db.query.tasks.findMany({
+      where: and(
+        eq(schema.tasks.novelId, novelId),
+        eq(schema.tasks.type, "content"),
+        eq(schema.tasks.chapterId, chapterId),
+      ),
+      orderBy: (tasks, { desc }) => [desc(tasks.createdAt)],
+      limit: 1,
+    });
+
+    res.json(recentTasks);
   } catch (error) {
     next(error);
   }
