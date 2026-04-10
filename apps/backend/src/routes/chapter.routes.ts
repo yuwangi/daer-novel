@@ -7,6 +7,45 @@ import { OocAgent } from "../services/ai/agents";
 
 const router: Router = Router();
 
+const MAX_SNAPSHOTS_PER_CHAPTER = 30;
+
+async function createChapterSnapshot(
+  chapterId: string,
+  novelId: string,
+  content: string,
+  title: string,
+  wordCount: number,
+  label: string = "自动快照",
+) {
+  const existing = await db.query.chapterSnapshots.findMany({
+    where: eq(schema.chapterSnapshots.chapterId, chapterId),
+    orderBy: [desc(schema.chapterSnapshots.createdAt)],
+  });
+
+  if (existing.length >= MAX_SNAPSHOTS_PER_CHAPTER) {
+    const toDelete = existing.slice(MAX_SNAPSHOTS_PER_CHAPTER - 1);
+    for (const snap of toDelete) {
+      await db
+        .delete(schema.chapterSnapshots)
+        .where(eq(schema.chapterSnapshots.id, snap.id));
+    }
+  }
+
+  const [snapshot] = await db
+    .insert(schema.chapterSnapshots)
+    .values({
+      chapterId,
+      novelId,
+      content,
+      title,
+      wordCount: wordCount ?? 0,
+      label,
+    })
+    .returning();
+
+  return snapshot;
+}
+
 // ========= Analysis & Checking Routes =========
 
 // POST /chapters/:id/ooc-check - Check text for out-of-character behavior
@@ -172,31 +211,14 @@ router.post("/:id/snapshots", async (req: AuthRequest, res, next) => {
       return;
     }
 
-    // Limit to 30 snapshots per chapter
-    const existing = await db.query.chapterSnapshots.findMany({
-      where: eq(schema.chapterSnapshots.chapterId, id),
-      orderBy: [desc(schema.chapterSnapshots.createdAt)],
-    });
-    if (existing.length >= 30) {
-      const toDelete = existing.slice(29);
-      for (const snap of toDelete) {
-        await db
-          .delete(schema.chapterSnapshots)
-          .where(eq(schema.chapterSnapshots.id, snap.id));
-      }
-    }
-
-    const [snapshot] = await db
-      .insert(schema.chapterSnapshots)
-      .values({
-        chapterId: id,
-        novelId: chapter.novelId,
-        content: chapter.content,
-        title: chapter.title,
-        wordCount: chapter.wordCount ?? 0,
-        label: label ?? "手动快照",
-      })
-      .returning();
+    const snapshot = await createChapterSnapshot(
+      id,
+      chapter.novelId,
+      chapter.content,
+      chapter.title,
+      chapter.wordCount ?? 0,
+      label ?? "手动快照",
+    );
 
     res.status(201).json(snapshot);
   } catch (error) {
@@ -244,14 +266,14 @@ router.post(
         where: eq(schema.chapters.id, id),
       });
       if (currentChapter?.content) {
-        await db.insert(schema.chapterSnapshots).values({
-          chapterId: id,
-          novelId: currentChapter.novelId,
-          content: currentChapter.content,
-          title: currentChapter.title,
-          wordCount: currentChapter.wordCount ?? 0,
-          label: "还原前自动保存",
-        });
+        await createChapterSnapshot(
+          id,
+          currentChapter.novelId,
+          currentChapter.content,
+          currentChapter.title,
+          currentChapter.wordCount ?? 0,
+          "还原前自动保存",
+        );
       }
 
       // Restore snapshot content
