@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Loader2,
@@ -115,6 +115,13 @@ export default function ChapterGenerator({
   const [contentOutline, setContentOutline] = useState("");
   const [contentInstructions, setContentInstructions] = useState("");
 
+  // 防重复点击 - 使用 ref 进行同步检查
+  const isGeneratingVolumeRef = useRef(false);
+  const isGeneratingChapterRef = useRef(false);
+  const isGeneratingContentRef = useRef<Record<string, boolean>>({});
+  const isSavingDraftRef = useRef(false);
+  const isSavingVolumeDraftRef = useRef(false);
+
   useEffect(() => {
     // Setup WebSocket
     const socketUrl =
@@ -196,8 +203,16 @@ export default function ChapterGenerator({
   };
 
   const handleGenerateVolumes = async () => {
+    // 防重复点击检查 - 使用 ref 进行同步检查
+    if (isGeneratingVolumeRef.current) {
+      toast.info("分卷规划任务正在提交中，请勿重复点击");
+      return;
+    }
+
+    isGeneratingVolumeRef.current = true;
     setIsVolumeSettingsModalOpen(false);
     setIsGeneratingStructure(true);
+
     try {
       const res = await tasksAPI.generateVolumes(novelId, {
         outline: outline || "",
@@ -209,7 +224,14 @@ export default function ChapterGenerator({
       }
       toast.success("分卷规划任务已提交");
     } catch (error) {
+      console.error("Failed to generate volumes:", error);
+      toast.error("分卷规划任务提交失败");
       setIsGeneratingStructure(false);
+    } finally {
+      // 延迟重置 ref，确保状态更新完成
+      setTimeout(() => {
+        isGeneratingVolumeRef.current = false;
+      }, 500);
     }
   };
 
@@ -306,11 +328,20 @@ export default function ChapterGenerator({
 
   const handleConfirmGeneration = async () => {
     if (!activeVolumeForChapters) return;
+
+    // 防重复点击检查 - 使用 ref 进行同步检查
+    if (isGeneratingChapterRef.current) {
+      toast.info("章节生成任务正在提交中，请勿重复点击");
+      return;
+    }
+
+    isGeneratingChapterRef.current = true;
     const volumeId = activeVolumeForChapters.id;
     activeVolumeRef.current = volumeId;
     setDraftVolumeId(volumeId); // Save before clearing
     setIsSettingsModalOpen(false);
     setIsGeneratingStructure(true);
+
     try {
       const res = await tasksAPI.generateChapters(novelId, {
         outline: outline || "",
@@ -328,6 +359,11 @@ export default function ChapterGenerator({
       toast.error("生成请求失败");
       setIsGeneratingStructure(false);
       setActiveVolumeForChapters(null);
+    } finally {
+      // 延迟重置 ref，确保状态更新完成
+      setTimeout(() => {
+        isGeneratingChapterRef.current = false;
+      }, 500);
     }
   };
 
@@ -342,8 +378,15 @@ export default function ChapterGenerator({
     if (!activeChapterForConfig) return;
 
     const chapterId = activeChapterForConfig.id;
-    setActiveChapterForConfig(null); // Close modal
 
+    // 防重复点击检查 - 使用 ref 进行同步检查，按 chapterId 区分
+    if (isGeneratingContentRef.current[chapterId]) {
+      toast.info("该章节生成任务正在提交中，请勿重复点击");
+      return;
+    }
+
+    isGeneratingContentRef.current[chapterId] = true;
+    setActiveChapterForConfig(null); // Close modal
     setGeneratingChapterId(chapterId);
     setGenerationProgress(0);
     setGenerationStatus("准备生成...");
@@ -362,6 +405,11 @@ export default function ChapterGenerator({
       console.error("Failed to generate chapter:", error);
       toast.error("生成请求失败");
       setGeneratingChapterId(null);
+    } finally {
+      // 延迟重置 ref，确保状态更新完成
+      setTimeout(() => {
+        isGeneratingContentRef.current[chapterId] = false;
+      }, 500);
     }
   };
 
@@ -928,7 +976,16 @@ export default function ChapterGenerator({
               <Button
                 onClick={async () => {
                   if (!draftVolumes) return;
+
+                  // 防重复点击检查
+                  if (isSavingVolumeDraftRef.current) {
+                    toast.info("保存操作正在进行中，请勿重复点击");
+                    return;
+                  }
+
+                  isSavingVolumeDraftRef.current = true;
                   setIsSavingVolumeDraft(true);
+
                   try {
                     await tasksAPI.saveBatchVolumes(novelId, draftVolumes);
                     toast.success("分卷已成功存入书库");
@@ -938,6 +995,9 @@ export default function ChapterGenerator({
                     toast.error("保存失败");
                   } finally {
                     setIsSavingVolumeDraft(false);
+                    setTimeout(() => {
+                      isSavingVolumeDraftRef.current = false;
+                    }, 500);
                   }
                 }}
                 disabled={isSavingVolumeDraft || !draftVolumes?.length}
@@ -1082,7 +1142,16 @@ export default function ChapterGenerator({
               <Button
                 onClick={async () => {
                   if (!draftVolumeId || !draftChapters) return;
+
+                  // 防重复点击检查
+                  if (isSavingDraftRef.current) {
+                    toast.info("保存操作正在进行中，请勿重复点击");
+                    return;
+                  }
+
+                  isSavingDraftRef.current = true;
                   setIsSavingDraft(true);
+
                   try {
                     await tasksAPI.saveBatchChapters(
                       novelId,
@@ -1096,6 +1165,9 @@ export default function ChapterGenerator({
                     toast.error("保存失败");
                   } finally {
                     setIsSavingDraft(false);
+                    setTimeout(() => {
+                      isSavingDraftRef.current = false;
+                    }, 500);
                   }
                 }}
                 disabled={isSavingDraft || !draftChapters?.length}

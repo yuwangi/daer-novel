@@ -16,6 +16,46 @@ import { retrieveRelevantKnowledge } from "../services/embedding";
 import { logger } from "../utils/logger";
 import { Server } from "socket.io";
 
+// 正在处理中的任务集合 - 用于内存级别的幂等性检查
+const processingTasks = new Set<string>();
+
+/**
+ * 检查任务是否已经在处理中
+ */
+function isTaskProcessing(taskId: string): boolean {
+  return processingTasks.has(taskId);
+}
+
+/**
+ * 标记任务为处理中
+ */
+function markTaskProcessing(taskId: string): void {
+  processingTasks.add(taskId);
+}
+
+/**
+ * 标记任务为处理完成
+ */
+function markTaskCompleted(taskId: string): void {
+  processingTasks.delete(taskId);
+}
+
+/**
+ * 检查数据库中任务状态是否允许执行
+ */
+async function canExecuteTask(taskId: string): Promise<boolean> {
+  const task = await db.query.tasks.findFirst({
+    where: eq(schema.tasks.id, taskId),
+  });
+
+  if (!task) {
+    return false;
+  }
+
+  // 只允许 queued 或 failed 状态的任务执行
+  return task.status === "queued" || task.status === "failed";
+}
+
 const connection = new IORedis({
   host: process.env.REDIS_HOST || "localhost",
   port: parseInt(process.env.REDIS_PORT || "6379"),
@@ -79,6 +119,26 @@ export function startWorker(io: Server) {
     "novel-generation",
     async (job: Job<TaskPayload>) => {
       const { taskId, novelId, chapterId, type, input } = job.data;
+
+      // 幂等性检查 1: 内存级别 - 检查是否已经在处理中
+      if (isTaskProcessing(taskId)) {
+        logger.warn(
+          `Task ${taskId} is already being processed, skipping duplicate execution`,
+        );
+        return { skipped: true, reason: "already_processing" };
+      }
+
+      // 幂等性检查 2: 数据库级别 - 检查任务状态
+      const canExecute = await canExecuteTask(taskId);
+      if (!canExecute) {
+        logger.warn(
+          `Task ${taskId} cannot be executed (status not queued/failed), skipping`,
+        );
+        return { skipped: true, reason: "invalid_status" };
+      }
+
+      // 标记任务为处理中
+      markTaskProcessing(taskId);
 
       try {
         // Update task status to running
@@ -428,6 +488,9 @@ export function startWorker(io: Server) {
         });
 
         throw error;
+      } finally {
+        // 无论成功或失败，都标记任务为处理完成
+        markTaskCompleted(taskId);
       }
     },
     {
