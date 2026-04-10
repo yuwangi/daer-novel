@@ -1,7 +1,7 @@
 import { Queue, Worker, Job } from "bullmq";
 import IORedis from "ioredis";
 import { db, schema } from "../database";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { createAIProvider } from "../services/ai/ai-config";
 import {
   OutlineAgent,
@@ -86,6 +86,14 @@ export function startWorker(io: Server) {
           .update(schema.tasks)
           .set({ status: "running", updatedAt: new Date() })
           .where(eq(schema.tasks.id, taskId));
+
+        // Set chapter status to generating at the start of content generation
+        if (chapterId && type === "content") {
+          await db
+            .update(schema.chapters)
+            .set({ status: "generating", updatedAt: new Date() })
+            .where(eq(schema.chapters.id, chapterId));
+        }
 
         // Emit progress update
         io.to(`task:${taskId}`).emit("task:progress", {
@@ -422,6 +430,14 @@ export function startWorker(io: Server) {
           })
           .where(eq(schema.tasks.id, taskId));
 
+        // Reset chapter status on failure
+        if (chapterId && type === "content") {
+          await db
+            .update(schema.chapters)
+            .set({ status: "failed", updatedAt: new Date() })
+            .where(eq(schema.chapters.id, chapterId));
+        }
+
         io.to(`task:${taskId}`).emit("task:failed", {
           taskId,
           error: error.message,
@@ -453,5 +469,102 @@ export function startWorker(io: Server) {
     logger.error(`Job ${job?.id} failed:`, err);
   });
 
+  // Run stale task cleanup on worker startup and every 5 minutes
+  cleanupStaleTasks();
+  setInterval(cleanupStaleTasks, 5 * 60 * 1000);
+
   return worker;
+}
+
+// Detect and reset stale tasks (running/generating for more than 2 hours)
+// AI generation can take a long time, so use a generous timeout
+export async function cleanupStaleTasks() {
+  try {
+    logger.info("Running stale task cleanup...");
+
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+
+    // Find tasks that have been running for too long
+    const staleTasks = await db
+      .select()
+      .from(schema.tasks)
+      .where(
+        sql`${schema.tasks.status} IN ('running', 'queued') 
+         AND ${schema.tasks.updatedAt} < ${twoHoursAgo}`,
+      );
+
+    if (staleTasks.length > 0) {
+      logger.info(`Found ${staleTasks.length} stale tasks to cleanup`);
+
+      for (const task of staleTasks) {
+        // Mark task as failed
+        await db
+          .update(schema.tasks)
+          .set({
+            status: "failed",
+            error: "Task timed out after 2 hours",
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.tasks.id, task.id));
+
+        // Reset associated chapter status
+        if (task.chapterId && task.type === "content") {
+          await db
+            .update(schema.chapters)
+            .set({
+              status: "failed",
+              updatedAt: new Date(),
+            })
+            .where(eq(schema.chapters.id, task.chapterId));
+        }
+
+        logger.info(`Cleaned up stale task: ${task.id}`);
+      }
+    }
+
+    // Also clean up chapters stuck in generating state without active task
+    // Use 1 hour threshold for chapters without tasks
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const staleChapters = await db
+      .select()
+      .from(schema.chapters)
+      .where(
+        sql`${schema.chapters.status} = 'generating' 
+         AND ${schema.chapters.updatedAt} < ${oneHourAgo}`,
+      );
+
+    if (staleChapters.length > 0) {
+      logger.info(`Found ${staleChapters.length} stale chapters to reset`);
+
+      for (const chapter of staleChapters) {
+        // Check if there's an active task for this chapter
+        const activeTask = await db
+          .select()
+          .from(schema.tasks)
+          .where(
+            sql`${schema.tasks.chapterId} = ${chapter.id} 
+             AND ${schema.tasks.status} IN ('running', 'queued')`,
+          )
+          .limit(1);
+
+        if (activeTask.length === 0) {
+          // Reset to pending instead of failed, since no task is running
+          // User can then retry manually
+          await db
+            .update(schema.chapters)
+            .set({
+              status: "pending",
+              updatedAt: new Date(),
+            })
+            .where(eq(schema.chapters.id, chapter.id));
+
+          logger.info(`Reset stale chapter (no active task): ${chapter.id}`);
+        }
+      }
+    }
+
+    logger.info("Stale task cleanup completed");
+  } catch (error) {
+    logger.error("Error during stale task cleanup:", error);
+  }
 }

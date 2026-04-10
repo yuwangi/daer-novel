@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, schema } from "../database";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { AuthRequest } from "../middleware/auth";
 import { novelQueue } from "../queue/worker";
 
@@ -174,11 +174,44 @@ router.post(
   "/:novelId/chapters/:chapterId/generate",
   async (req: AuthRequest, res, next) => {
     try {
+      const { novelId, chapterId } = req.params;
+
+      // Idempotency check: prevent duplicate tasks for the same chapter
+      const activeTask = await db
+        .select()
+        .from(schema.tasks)
+        .where(
+          sql`${schema.tasks.chapterId} = ${chapterId} 
+           AND ${schema.tasks.status} IN ('queued', 'running')`,
+        )
+        .limit(1);
+
+      if (activeTask.length > 0) {
+        res.status(409).json({
+          error: "该章节已有正在进行的生成任务",
+          taskId: activeTask[0].id,
+        });
+        return;
+      }
+
+      // Also ensure chapter is not already in generating state
+      const chapter = await db.query.chapters.findFirst({
+        where: eq(schema.chapters.id, chapterId),
+      });
+
+      if (chapter?.status === "generating") {
+        // Clean up stale state if no active task exists
+        await db
+          .update(schema.chapters)
+          .set({ status: "pending", updatedAt: new Date() })
+          .where(eq(schema.chapters.id, chapterId));
+      }
+
       const [task] = await db
         .insert(schema.tasks)
         .values({
-          novelId: req.params.novelId,
-          chapterId: req.params.chapterId,
+          novelId,
+          chapterId,
           type: "content",
           status: "queued",
         })
@@ -188,9 +221,10 @@ router.post(
         "generate-content",
         {
           taskId: task.id,
-          novelId: req.params.novelId,
-          chapterId: req.params.chapterId,
+          novelId,
+          chapterId,
           type: "content",
+          input: req.body,
         },
         {
           attempts: 3,
@@ -202,6 +236,52 @@ router.post(
       );
 
       res.json(task);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Reset chapter status manually
+router.post(
+  "/:novelId/chapters/:chapterId/reset",
+  async (req: AuthRequest, res, next) => {
+    try {
+      const { chapterId } = req.params;
+
+      // Cancel any active tasks for this chapter
+      await db
+        .update(schema.tasks)
+        .set({
+          status: "cancelled",
+          error: "User manually reset chapter status",
+          updatedAt: new Date(),
+        })
+        .where(
+          sql`${schema.tasks.chapterId} = ${chapterId} 
+           AND ${schema.tasks.status} IN ('queued', 'running')`,
+        );
+
+      // Reset chapter status
+      const [updatedChapter] = await db
+        .update(schema.chapters)
+        .set({
+          status: "pending",
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.chapters.id, chapterId))
+        .returning();
+
+      if (!updatedChapter) {
+        res.status(404).json({ error: "Chapter not found" });
+        return;
+      }
+
+      res.json({
+        success: true,
+        chapter: updatedChapter,
+        message: "章节状态已重置，可以重新生成",
+      });
     } catch (error) {
       next(error);
     }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Loader2,
@@ -16,6 +16,7 @@ import {
   X,
   FileText,
   Settings2,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -34,6 +35,7 @@ interface Chapter {
   content?: string;
   wordCount: number;
   status: "pending" | "generating" | "completed" | "failed";
+  updatedAt?: string | Date;
 }
 
 interface Volume {
@@ -115,6 +117,83 @@ export default function ChapterGenerator({
   const [contentOutline, setContentOutline] = useState("");
   const [contentInstructions, setContentInstructions] = useState("");
 
+  // Restore generating state on component mount and validate stale chapters
+  const validateGeneratingChapters = useCallback(() => {
+    if (!volumes || volumes.length === 0) return;
+
+    const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+    const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000;
+
+    for (const volume of volumes) {
+      for (const chapter of volume.chapters) {
+        if (chapter.status === "generating") {
+          const chapterUpdatedAt = new Date(chapter.updatedAt || 0).getTime();
+
+          // Case 1: Actively generating (within 10 minutes)
+          // Restore the generating state UI automatically
+          if (
+            generatingChapterId !== chapter.id &&
+            chapterUpdatedAt >= tenMinutesAgo
+          ) {
+            console.log(`Restoring generation state for: ${chapter.title}`);
+            setGeneratingChapterId(chapter.id);
+            setGenerationStatus("正在后台生成中...");
+            setGenerationProgress(50); // Show intermediate progress
+            toast.info(`检测到「${chapter.title}」正在后台生成中`);
+          }
+
+          // Case 2: Potentially stuck (10-30 minutes) - show warning but don't auto-reset
+          else if (
+            generatingChapterId !== chapter.id &&
+            chapterUpdatedAt >= thirtyMinutesAgo &&
+            chapterUpdatedAt < tenMinutesAgo
+          ) {
+            console.log(`Detected potentially stuck chapter: ${chapter.title}`);
+            toast.warning(
+              `「${chapter.title}」已生成较长时间，如无进展可手动重置`,
+            );
+            setGeneratingChapterId(chapter.id);
+            setGenerationStatus("生成中 (可能较慢)");
+            setGenerationProgress(50);
+          }
+
+          // Case 3: Stale (> 30 minutes) - let user know they can reset
+          else if (chapterUpdatedAt < thirtyMinutesAgo) {
+            console.log(`Detected stale chapter: ${chapter.title}`);
+          }
+        }
+      }
+    }
+  }, [volumes, generatingChapterId]);
+
+  const handleResetChapter = async (chapter: Chapter) => {
+    if (
+      !confirm(
+        `确定要重置章节「${chapter.title}」的状态吗？\n\n重置后可以重新生成正文。`,
+      )
+    )
+      return;
+
+    try {
+      await tasksAPI.resetChapterStatus(novelId, chapter.id);
+      toast.success(`章节「${chapter.title}」状态已重置，现在可以重新生成`);
+      onUpdate();
+    } catch (error) {
+      toast.error("重置失败，请重试");
+      console.error("Failed to reset chapter:", error);
+    }
+  };
+
+  // Check if chapter is likely stuck
+  const isChapterStuck = (chapter: Chapter) => {
+    if (chapter.status !== "generating") return false;
+    if (generatingChapterId === chapter.id) return false;
+
+    const chapterUpdatedAt = new Date(chapter.updatedAt || 0).getTime();
+    const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+    return chapterUpdatedAt < tenMinutesAgo;
+  };
+
   useEffect(() => {
     // Setup WebSocket
     const socketUrl =
@@ -148,17 +227,21 @@ export default function ChapterGenerator({
 
       if (data.type === "chapter_planning" && data.result?.chapters) {
         setDraftChapters(data.result.chapters);
-        // Use the Ref to get the correct volumeId even if the state is stale
         setDraftVolumeId(activeVolumeRef.current);
         setIsDraftModalOpen(true);
+        toast.success("章节结构生成完成，请确认并保存");
       } else if (data.type === "volume_planning" && data.result?.volumes) {
         setDraftVolumes(data.result.volumes);
         setIsVolumeDraftModalOpen(true);
+        toast.success("分卷规划生成完成，请确认并保存");
       } else if (data.type === "content") {
         // Chapter content generated successfully
         setGeneratingChapterId(null);
+        toast.success("章节正文生成完成！");
         onUpdate(); // refresh the list to show new content
         return; // Avoid the setTimeout below for content generation
+      } else if (data.type === "outline") {
+        toast.success("大纲生成完成！");
       }
 
       setIsGeneratingStructure(false);
@@ -182,7 +265,12 @@ export default function ChapterGenerator({
     return () => {
       newSocket.close();
     };
-  }, [novelId, onUpdate]);
+  }, [novelId, onUpdate, validateGeneratingChapters]);
+
+  // Run stale chapter validation on mount and when volumes change
+  useEffect(() => {
+    validateGeneratingChapters();
+  }, [validateGeneratingChapters, volumes]);
 
   // Structure Generation Handlers
   // Volume Structure Generation
@@ -648,31 +736,61 @@ export default function ChapterGenerator({
                             )}
 
                             {generatingChapterId === chapter.id ? (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                disabled
-                                className="h-8"
-                              >
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                生成中
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled
+                                  className="h-8"
+                                >
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  生成中
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 text-amber-500 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/50 px-2"
+                                  onClick={() => handleResetChapter(chapter)}
+                                  title="强制重置状态（如长时间卡住）"
+                                >
+                                  <RefreshCw className="w-4 h-4" />
+                                </Button>
+                              </div>
                             ) : (
                               <>
-                                {chapter.status !== "completed" && (
+                                {chapter.status === "generating" && (
                                   <Button
+                                    variant="ghost"
                                     size="sm"
-                                    className="h-8"
-                                    onClick={() =>
-                                      handleGenerateChapter(chapter)
-                                    }
+                                    className={cn(
+                                      "h-8",
+                                      isChapterStuck(chapter)
+                                        ? "text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 border border-red-200 dark:border-red-800"
+                                        : "text-amber-500 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/50",
+                                    )}
+                                    onClick={() => handleResetChapter(chapter)}
                                   >
-                                    <Sparkles className="w-4 h-4 mr-1" />
-                                    {chapter.status === "failed"
-                                      ? "重试"
-                                      : "生成正文"}
+                                    <RefreshCw className="w-4 h-4 mr-1" />
+                                    {isChapterStuck(chapter)
+                                      ? "已卡住，点击重置"
+                                      : "重置状态"}
                                   </Button>
                                 )}
+                                {chapter.status !== "completed" &&
+                                  chapter.status !== "generating" && (
+                                    <Button
+                                      size="sm"
+                                      className="h-8"
+                                      onClick={() =>
+                                        handleGenerateChapter(chapter)
+                                      }
+                                    >
+                                      <Sparkles className="w-4 h-4 mr-1" />
+                                      {chapter.status === "failed"
+                                        ? "重试"
+                                        : "生成正文"}
+                                    </Button>
+                                  )}
 
                                 <Button
                                   variant="secondary"
@@ -733,14 +851,19 @@ export default function ChapterGenerator({
                               chapter.status === "completed"
                                 ? "bg-green-100 text-green-700"
                                 : chapter.status === "generating"
-                                  ? "bg-blue-100 text-blue-700"
+                                  ? isChapterStuck(chapter)
+                                    ? "bg-amber-100 text-amber-700 border border-amber-300"
+                                    : "bg-blue-100 text-blue-700"
                                   : chapter.status === "failed"
                                     ? "bg-red-100 text-red-700"
                                     : "bg-gray-100 text-gray-600"
                             }`}
                           >
                             {chapter.status === "completed" && "已完成"}
-                            {chapter.status === "generating" && "生成中"}
+                            {chapter.status === "generating" &&
+                              (isChapterStuck(chapter)
+                                ? "可能已卡住"
+                                : "生成中")}
                             {chapter.status === "failed" && "生成失败"}
                             {chapter.status === "pending" && "待生成"}
                           </span>
@@ -748,20 +871,39 @@ export default function ChapterGenerator({
                       </div>
 
                       {/* Generation Progress Bar */}
-                      {generatingChapterId === chapter.id && (
+                      {(generatingChapterId === chapter.id ||
+                        chapter.status === "generating") && (
                         <div className="mt-2 space-y-2">
                           <div className="flex items-center justify-between text-xs">
                             <span className="text-gray-600 dark:text-gray-400">
-                              {generationStatus}
+                              {generatingChapterId === chapter.id
+                                ? generationStatus
+                                : isChapterStuck(chapter)
+                                  ? "可能已卡住，可手动重置"
+                                  : "正在生成中..."}
                             </span>
                             <span className="text-primary-600 dark:text-primary-400">
-                              {generationProgress}%
+                              {generatingChapterId === chapter.id
+                                ? `${generationProgress}%`
+                                : "--"}
                             </span>
                           </div>
                           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
                             <div
-                              className="bg-primary-500 h-1.5 rounded-full transition-all duration-300"
-                              style={{ width: `${generationProgress}%` }}
+                              className={cn(
+                                "h-1.5 rounded-full transition-all duration-300",
+                                isChapterStuck(chapter) &&
+                                  generatingChapterId !== chapter.id
+                                  ? "bg-amber-500"
+                                  : "bg-primary-500",
+                              )}
+                              style={{
+                                width: `${generatingChapterId === chapter.id ? generationProgress : 45}%`,
+                                animation:
+                                  generatingChapterId !== chapter.id
+                                    ? "pulse 2s infinite"
+                                    : "none",
+                              }}
                             />
                           </div>
                         </div>
