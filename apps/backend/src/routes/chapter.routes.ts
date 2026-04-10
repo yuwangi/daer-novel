@@ -98,22 +98,38 @@ router.patch("/:id", async (req: AuthRequest, res, next) => {
     const { id } = req.params;
     const { title, content, outline } = req.body;
 
-    const [chapter] = await db
-      .update(schema.chapters)
-      .set({
-        title,
-        content,
-        outline,
-        wordCount: content ? content.length : undefined,
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.chapters.id, id))
-      .returning();
+    // Get current chapter to compare content
+    const currentChapter = await db.query.chapters.findFirst({
+      where: eq(schema.chapters.id, id),
+    });
 
-    if (!chapter) {
+    if (!currentChapter) {
       res.status(404).json({ error: "Chapter not found" });
       return;
     }
+
+    // Check if content actually changed
+    const contentChanged =
+      content !== undefined && content !== currentChapter.content;
+
+    const updateData: any = {
+      title,
+      content,
+      outline,
+      wordCount: content ? content.length : undefined,
+      updatedAt: new Date(),
+    };
+
+    // Only update contentUpdatedAt if content actually changed
+    if (contentChanged) {
+      updateData.contentUpdatedAt = new Date();
+    }
+
+    const [chapter] = await db
+      .update(schema.chapters)
+      .set(updateData)
+      .where(eq(schema.chapters.id, id))
+      .returning();
 
     res.json(chapter);
   } catch (error) {

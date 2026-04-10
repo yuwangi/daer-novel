@@ -260,6 +260,7 @@ export const chapters = pgTable("chapters", {
   content: text("content"), // Generated prose
   wordCount: integer("word_count").default(0),
   status: chapterStatusEnum("status").default("pending"),
+  contentUpdatedAt: timestamp("content_updated_at"), // Only updated when content actually changes
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

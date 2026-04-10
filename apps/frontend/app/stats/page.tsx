@@ -31,6 +31,7 @@ interface Chapter {
   order: number;
   status: string;
   updatedAt: string;
+  contentUpdatedAt: string | null;
 }
 
 interface Volume {
@@ -156,10 +157,12 @@ export default function StatsPage() {
   ).length;
   const totalNovels = novels.length;
 
-  // Calculate today's words from database (chapters updated today)
+  // Calculate today's words from database (chapters where content was actually updated today)
   const todayWords = useMemo(() => {
     return allChapters.reduce((sum, chapter) => {
-      if (chapter.updatedAt && isToday(chapter.updatedAt)) {
+      // Use contentUpdatedAt instead of updatedAt to only count chapters where content actually changed
+      const dateToCheck = chapter.contentUpdatedAt || chapter.updatedAt;
+      if (dateToCheck && isToday(dateToCheck)) {
         return sum + (chapter.wordCount || 0);
       }
       return sum;
@@ -332,7 +335,7 @@ export default function StatsPage() {
                     )}
                   </span>
                   <span className="text-muted-foreground">
-                    注：字数来自今日更新的章节
+                    注：仅统计今日实际编辑内容的章节
                   </span>
                 </div>
               </div>
