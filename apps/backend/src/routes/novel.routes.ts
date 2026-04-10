@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, schema } from "../database";
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import { AuthRequest } from "../middleware/auth";
 import { AppError } from "../middleware/errorHandler";
 import { z } from "zod";
@@ -28,6 +28,24 @@ import { logger } from "../utils/logger";
 import epub from "epub-gen-memory";
 
 const router: Router = Router();
+
+async function validateCharacterRelationships(
+  novelId: string,
+  relationships: { characterId: string; relation: string }[] | undefined,
+): Promise<{ characterId: string; relation: string }[]> {
+  if (!relationships?.length) return [];
+
+  const existingCharacterIds = (
+    await db.query.characters.findMany({
+      where: eq(schema.characters.novelId, novelId),
+      columns: { id: true },
+    })
+  ).map((c) => c.id);
+
+  return relationships.filter((r) =>
+    existingCharacterIds.includes(r.characterId),
+  );
+}
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -207,6 +225,30 @@ router.get("/", async (req: AuthRequest, res, next) => {
     const novels = await db.query.novels.findMany({
       where: eq(schema.novels.userId, req.userId!),
       orderBy: (novels, { desc }) => [desc(novels.createdAt)],
+    });
+
+    res.json(novels);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get all novels with volumes/chapters for stats (bulk endpoint)
+router.get("/stats/all", async (req: AuthRequest, res, next) => {
+  try {
+    const novels = await db.query.novels.findMany({
+      where: eq(schema.novels.userId, req.userId!),
+      orderBy: (novels, { desc }) => [desc(novels.createdAt)],
+      with: {
+        volumes: {
+          with: {
+            chapters: {
+              orderBy: (chapters, { asc }) => [asc(chapters.order)],
+            },
+          },
+          orderBy: (volumes, { asc }) => [asc(volumes.order)],
+        },
+      },
     });
 
     res.json(novels);
@@ -429,11 +471,19 @@ router.get("/:id/characters", async (req: AuthRequest, res, next) => {
 // Create character
 router.post("/:id/characters", async (req: AuthRequest, res, next) => {
   try {
+    const novelId = req.params.id;
+    const characterData = req.body;
+
+    characterData.relationships = await validateCharacterRelationships(
+      novelId,
+      characterData.relationships,
+    );
+
     const [character] = await db
       .insert(schema.characters)
       .values({
-        novelId: req.params.id,
-        ...req.body,
+        novelId,
+        ...characterData,
       })
       .returning();
 
@@ -448,10 +498,21 @@ router.patch(
   "/:novelId/characters/:characterId",
   async (req: AuthRequest, res, next) => {
     try {
+      const novelId = req.params.novelId;
+      const characterId = req.params.characterId;
+      const characterData = req.body;
+
+      if (characterData.relationships !== undefined) {
+        characterData.relationships = await validateCharacterRelationships(
+          novelId,
+          characterData.relationships,
+        );
+      }
+
       const [character] = await db
         .update(schema.characters)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(eq(schema.characters.id, req.params.characterId))
+        .set({ ...characterData, updatedAt: new Date() })
+        .where(eq(schema.characters.id, characterId))
         .returning();
 
       res.json(character);
@@ -466,9 +527,37 @@ router.delete(
   "/:novelId/characters/:characterId",
   async (req: AuthRequest, res, next) => {
     try {
+      const novelId = req.params.novelId;
+      const deletedCharacterId = req.params.characterId;
+
+      const otherCharacters = await db.query.characters.findMany({
+        where: and(
+          eq(schema.characters.novelId, novelId),
+          ne(schema.characters.id, deletedCharacterId),
+        ),
+      });
+
+      for (const char of otherCharacters) {
+        if (char.relationships?.length) {
+          const filteredRelationships = char.relationships.filter(
+            (r) => r.characterId !== deletedCharacterId,
+          );
+
+          if (filteredRelationships.length !== char.relationships.length) {
+            await db
+              .update(schema.characters)
+              .set({
+                relationships: filteredRelationships,
+                updatedAt: new Date(),
+              })
+              .where(eq(schema.characters.id, char.id));
+          }
+        }
+      }
+
       await db
         .delete(schema.characters)
-        .where(eq(schema.characters.id, req.params.characterId));
+        .where(eq(schema.characters.id, deletedCharacterId));
 
       res.status(204).send();
     } catch (error) {
