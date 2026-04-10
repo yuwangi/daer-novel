@@ -29,12 +29,13 @@ if [ -f "package.json" ]; then
     echo "检测到 Node.js 项目..."
     INSTALL_NODE="RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs"
     if [ -f "pnpm-lock.yaml" ]; then
-        INSTALL_PNPM="RUN npm install -g pnpm"
+        INSTALL_PNPM="RUN npm install -g pnpm && pnpm config set registry https://registry.npmmirror.com"
         POST_COPY_COMMANDS="$POST_COPY_COMMANDS\nRUN pnpm install"
     elif [ -f "yarn.lock" ]; then
-        INSTALL_PNPM="RUN npm install -g yarn"
+        INSTALL_PNPM="RUN npm install -g yarn && yarn config set registry https://registry.npmmirror.com"
         POST_COPY_COMMANDS="$POST_COPY_COMMANDS\nRUN yarn install"
     else
+        INSTALL_PNPM="RUN npm config set registry https://registry.npmmirror.com"
         POST_COPY_COMMANDS="$POST_COPY_COMMANDS\nRUN npm install"
     fi
 fi
@@ -106,6 +107,11 @@ FROM $BASE_IMAGE
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# 加速: 使用国内 Apt 源 (清华大学镜像)
+RUN sed -i 's/ports.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list && \\
+    sed -i 's/archive.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list && \\
+    sed -i 's/security.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+
 # 设置工作目录
 WORKDIR /app
 
@@ -122,7 +128,6 @@ $INSTALL_PNPM
 $(echo -e "$SETUP_COMMANDS")
 
 # 4. 复制源码
-# 注意: 为了保证 start_task.sh 权限，我们在复制后显式赋予执行权
 COPY repo/ ./
 RUN chmod +x start_task.sh
 
@@ -150,11 +155,12 @@ rsync -a --exclude="node_modules" \
     cd "$TASK_ID/environment/repo" || exit
     git init
     git add .
-    git commit -m "initial commit: one-click full-stack project"
+    git commit -m "initial commit: one-click project with optimized build"
 )
 
 echo "=========================================================="
 echo "完成！项目环境已创建在: $TASK_ID/"
+echo "已集成清华大学 Apt 源及 npmmirror 加速，构建速度应显著提升。"
 echo "您可以运行以下命令一键构建并启动项目："
 echo "----------------------------------------------------------"
 echo "cd $TASK_ID/environment && docker build -t $TASK_ID . && docker run -it -p 8001:8001 -p 8002:8002 $TASK_ID"
