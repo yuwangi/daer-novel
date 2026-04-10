@@ -262,6 +262,7 @@ export const chapters = pgTable("chapters", {
   status: chapterStatusEnum("status").default("pending"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  contentModifiedAt: timestamp("content_modified_at"), // Track when actual writing content changes (for daily word count stats)
 });
 
 // Chapter Snapshots table (Version History)
