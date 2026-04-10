@@ -290,9 +290,10 @@ export const tasks = pgTable("tasks", {
   }),
   type: taskTypeEnum("type").notNull(),
   status: taskStatusEnum("status").default("queued"),
-  progress: integer("progress").default(0), // 0-100
+  progress: integer("progress").default(0),
   result: jsonb("result").$type<any>(),
   error: text("error"),
+  idempotencyKey: text("idempotency_key"),
   metadata: jsonb("metadata").$type<{
     model?: string;
     tokensUsed?: number;
