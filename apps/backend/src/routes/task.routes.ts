@@ -1,33 +1,71 @@
 import { Router } from "express";
 import { db, schema } from "../database";
-import { eq } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { AuthRequest } from "../middleware/auth";
 import { novelQueue } from "../queue/worker";
+import crypto from "crypto";
 
 const router: Router = Router();
+
+function generateIdempotencyKey(
+  novelId: string,
+  type: string,
+  chapterId?: string,
+): string {
+  const data = chapterId ? `${novelId}:${type}:${chapterId}` : `${novelId}:${type}`;
+  return crypto.createHash("sha256").update(data).digest("hex");
+}
+
+async function findExistingTask(
+  novelId: string,
+  type: string,
+  chapterId?: string,
+): Promise<typeof schema.tasks.$inferSelect | null> {
+  const idempotencyKey = generateIdempotencyKey(novelId, type, chapterId);
+
+  const existingTask = await db.query.tasks.findFirst({
+    where: and(
+      eq(schema.tasks.idempotencyKey, idempotencyKey),
+      inArray(schema.tasks.status, ["queued", "running"]),
+    ),
+  });
+
+  return existingTask || null;
+}
+
+export { generateIdempotencyKey, findExistingTask };
 
 // Generate outline
 router.post(
   "/:novelId/generate/outline",
   async (req: AuthRequest, res, next) => {
     try {
-      // Create task
+      const novelId = req.params.novelId;
+      const type = "outline";
+
+      const existingTask = await findExistingTask(novelId, type);
+      if (existingTask) {
+        return res.json(existingTask);
+      }
+
+      const idempotencyKey = generateIdempotencyKey(novelId, type);
+
       const [task] = await db
         .insert(schema.tasks)
         .values({
-          novelId: req.params.novelId,
-          type: "outline",
+          novelId,
+          type,
           status: "queued",
+          idempotencyKey,
         })
         .returning();
 
-      // Queue job
       await novelQueue.add(
         "generate-outline",
         {
           taskId: task.id,
-          novelId: req.params.novelId,
-          type: "outline",
+          novelId,
+          type,
         },
         {
           attempts: 3,
@@ -35,6 +73,7 @@ router.post(
             type: "exponential",
             delay: 2000,
           },
+          jobId: idempotencyKey,
         },
       );
 
@@ -51,13 +90,23 @@ router.post(
   async (req: AuthRequest, res, next) => {
     try {
       const { outline } = req.body;
+      const novelId = req.params.novelId;
+      const type = "title";
+
+      const existingTask = await findExistingTask(novelId, type);
+      if (existingTask) {
+        return res.json(existingTask);
+      }
+
+      const idempotencyKey = generateIdempotencyKey(novelId, type);
 
       const [task] = await db
         .insert(schema.tasks)
         .values({
-          novelId: req.params.novelId,
-          type: "title",
+          novelId,
+          type,
           status: "queued",
+          idempotencyKey,
         })
         .returning();
 
@@ -65,8 +114,8 @@ router.post(
         "generate-titles",
         {
           taskId: task.id,
-          novelId: req.params.novelId,
-          type: "title",
+          novelId,
+          type,
           input: { outline },
         },
         {
@@ -75,6 +124,7 @@ router.post(
             type: "exponential",
             delay: 2000,
           },
+          jobId: idempotencyKey,
         },
       );
 
@@ -91,13 +141,23 @@ router.post(
   async (req: AuthRequest, res, next) => {
     try {
       const { outline } = req.body;
+      const novelId = req.params.novelId;
+      const type = "volume_planning";
+
+      const existingTask = await findExistingTask(novelId, type);
+      if (existingTask) {
+        return res.json(existingTask);
+      }
+
+      const idempotencyKey = generateIdempotencyKey(novelId, type);
 
       const [task] = await db
         .insert(schema.tasks)
         .values({
-          novelId: req.params.novelId,
-          type: "volume_planning",
+          novelId,
+          type,
           status: "queued",
+          idempotencyKey,
         })
         .returning();
 
@@ -105,8 +165,8 @@ router.post(
         "generate-volumes",
         {
           taskId: task.id,
-          novelId: req.params.novelId,
-          type: "volume_planning",
+          novelId,
+          type,
           input: {
             outline,
             additionalRequirements: req.body.additionalRequirements,
@@ -118,6 +178,7 @@ router.post(
             type: "exponential",
             delay: 2000,
           },
+          jobId: idempotencyKey,
         },
       );
 
@@ -135,13 +196,23 @@ router.post(
     try {
       const { outline, volumeId, additionalRequirements, targetCount } =
         req.body;
+      const novelId = req.params.novelId;
+      const type = "chapter_planning";
+
+      const existingTask = await findExistingTask(novelId, type, volumeId);
+      if (existingTask) {
+        return res.json(existingTask);
+      }
+
+      const idempotencyKey = generateIdempotencyKey(novelId, type, volumeId);
 
       const [task] = await db
         .insert(schema.tasks)
         .values({
-          novelId: req.params.novelId,
-          type: "chapter_planning",
+          novelId,
+          type,
           status: "queued",
+          idempotencyKey,
         })
         .returning();
 
@@ -149,8 +220,8 @@ router.post(
         "generate-chapters",
         {
           taskId: task.id,
-          novelId: req.params.novelId,
-          type: "chapter_planning",
+          novelId,
+          type,
           input: { outline, volumeId, additionalRequirements, targetCount },
         },
         {
@@ -159,6 +230,7 @@ router.post(
             type: "exponential",
             delay: 2000,
           },
+          jobId: idempotencyKey,
         },
       );
 
@@ -174,13 +246,25 @@ router.post(
   "/:novelId/chapters/:chapterId/generate",
   async (req: AuthRequest, res, next) => {
     try {
+      const novelId = req.params.novelId;
+      const chapterId = req.params.chapterId;
+      const type = "content";
+
+      const existingTask = await findExistingTask(novelId, type, chapterId);
+      if (existingTask) {
+        return res.json(existingTask);
+      }
+
+      const idempotencyKey = generateIdempotencyKey(novelId, type, chapterId);
+
       const [task] = await db
         .insert(schema.tasks)
         .values({
-          novelId: req.params.novelId,
-          chapterId: req.params.chapterId,
-          type: "content",
+          novelId,
+          chapterId,
+          type,
           status: "queued",
+          idempotencyKey,
         })
         .returning();
 
@@ -188,9 +272,10 @@ router.post(
         "generate-content",
         {
           taskId: task.id,
-          novelId: req.params.novelId,
-          chapterId: req.params.chapterId,
-          type: "content",
+          novelId,
+          chapterId,
+          type,
+          input: req.body,
         },
         {
           attempts: 3,
@@ -198,6 +283,7 @@ router.post(
             type: "exponential",
             delay: 2000,
           },
+          jobId: idempotencyKey,
         },
       );
 

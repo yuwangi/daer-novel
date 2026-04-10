@@ -24,6 +24,11 @@ import { io, Socket } from "socket.io-client";
 import { tasksAPI } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  acquireTaskLock,
+  releaseTaskLock,
+  isTaskLocked,
+} from "@/lib/task-lock";
 
 interface Chapter {
   id: string;
@@ -148,17 +153,18 @@ export default function ChapterGenerator({
 
       if (data.type === "chapter_planning" && data.result?.chapters) {
         setDraftChapters(data.result.chapters);
-        // Use the Ref to get the correct volumeId even if the state is stale
         setDraftVolumeId(activeVolumeRef.current);
         setIsDraftModalOpen(true);
+        releaseTaskLock(`generate-chapters-${novelId}-${activeVolumeRef.current}`);
       } else if (data.type === "volume_planning" && data.result?.volumes) {
         setDraftVolumes(data.result.volumes);
         setIsVolumeDraftModalOpen(true);
+        releaseTaskLock(`generate-volumes-${novelId}`);
       } else if (data.type === "content") {
-        // Chapter content generated successfully
         setGeneratingChapterId(null);
-        onUpdate(); // refresh the list to show new content
-        return; // Avoid the setTimeout below for content generation
+        releaseTaskLock(`generate-content-${novelId}-${data.chapterId || ""}`);
+        onUpdate();
+        return;
       }
 
       setIsGeneratingStructure(false);
@@ -175,8 +181,16 @@ export default function ChapterGenerator({
       toast.error(`生成失败: ${data.error || "未知错误"}`);
       setGeneratingChapterId(null);
       setGenerationProgress(0);
-      setIsGeneratingStructure(false); // Reset global structure generation state
+      setIsGeneratingStructure(false);
       setActiveVolumeForChapters(null);
+      
+      if (data.type === "chapter_planning") {
+        releaseTaskLock(`generate-chapters-${novelId}-${activeVolumeRef.current}`);
+      } else if (data.type === "volume_planning") {
+        releaseTaskLock(`generate-volumes-${novelId}`);
+      } else if (data.type === "content") {
+        releaseTaskLock(`generate-content-${novelId}-${data.chapterId || ""}`);
+      }
     });
 
     return () => {
@@ -196,6 +210,12 @@ export default function ChapterGenerator({
   };
 
   const handleGenerateVolumes = async () => {
+    const lockKey = `generate-volumes-${novelId}`;
+    if (!acquireTaskLock(lockKey)) {
+      toast.warning("任务正在处理中，请勿重复提交");
+      return;
+    }
+
     setIsVolumeSettingsModalOpen(false);
     setIsGeneratingStructure(true);
     try {
@@ -210,6 +230,7 @@ export default function ChapterGenerator({
       toast.success("分卷规划任务已提交");
     } catch (error) {
       setIsGeneratingStructure(false);
+      releaseTaskLock(lockKey);
     }
   };
 
@@ -307,8 +328,15 @@ export default function ChapterGenerator({
   const handleConfirmGeneration = async () => {
     if (!activeVolumeForChapters) return;
     const volumeId = activeVolumeForChapters.id;
+    const lockKey = `generate-chapters-${novelId}-${volumeId}`;
+    
+    if (!acquireTaskLock(lockKey)) {
+      toast.warning("任务正在处理中，请勿重复提交");
+      return;
+    }
+
     activeVolumeRef.current = volumeId;
-    setDraftVolumeId(volumeId); // Save before clearing
+    setDraftVolumeId(volumeId);
     setIsSettingsModalOpen(false);
     setIsGeneratingStructure(true);
     try {
@@ -328,6 +356,7 @@ export default function ChapterGenerator({
       toast.error("生成请求失败");
       setIsGeneratingStructure(false);
       setActiveVolumeForChapters(null);
+      releaseTaskLock(lockKey);
     }
   };
 
@@ -342,7 +371,14 @@ export default function ChapterGenerator({
     if (!activeChapterForConfig) return;
 
     const chapterId = activeChapterForConfig.id;
-    setActiveChapterForConfig(null); // Close modal
+    const lockKey = `generate-content-${novelId}-${chapterId}`;
+    
+    if (!acquireTaskLock(lockKey)) {
+      toast.warning("任务正在处理中，请勿重复提交");
+      return;
+    }
+
+    setActiveChapterForConfig(null);
 
     setGeneratingChapterId(chapterId);
     setGenerationProgress(0);
@@ -362,6 +398,7 @@ export default function ChapterGenerator({
       console.error("Failed to generate chapter:", error);
       toast.error("生成请求失败");
       setGeneratingChapterId(null);
+      releaseTaskLock(lockKey);
     }
   };
 
