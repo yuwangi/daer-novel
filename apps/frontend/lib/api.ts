@@ -249,6 +249,11 @@ export const tasksAPI = {
   // Analysis
   checkOoc: (chapterId: string, content: string) =>
     api.post(`/chapters/${chapterId}/ooc-check`, { content }),
+
+  // Task Sync
+  syncTasks: () => api.post("/tasks/sync"),
+  getActiveTasks: (novelId: string) =>
+    api.get(`/novels/${novelId}/tasks/active`),
 };
 
 // AI Config API

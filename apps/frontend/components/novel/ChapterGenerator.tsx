@@ -116,6 +116,19 @@ export default function ChapterGenerator({
   const [contentInstructions, setContentInstructions] = useState("");
 
   useEffect(() => {
+    // Sync task status on mount - check for stale tasks
+    const syncTasks = async () => {
+      try {
+        await tasksAPI.syncTasks();
+        // Refresh data after sync
+        onUpdate();
+      } catch (error) {
+        console.error("Failed to sync tasks:", error);
+      }
+    };
+
+    syncTasks();
+
     // Setup WebSocket
     const socketUrl =
       process.env.NEXT_PUBLIC_API_URL ||
