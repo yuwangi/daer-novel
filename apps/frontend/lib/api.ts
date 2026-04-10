@@ -249,6 +249,12 @@ export const tasksAPI = {
   // Analysis
   checkOoc: (chapterId: string, content: string) =>
     api.post(`/chapters/${chapterId}/ooc-check`, { content }),
+
+  // Task status recovery
+  getRunningTasks: (novelId: string) =>
+    api.get(`/novels/${novelId}/tasks/running`),
+  getRecentChapterTask: (novelId: string, chapterId: string) =>
+    api.get(`/novels/${novelId}/tasks/recent?chapterId=${chapterId}`),
 };
 
 // AI Config API

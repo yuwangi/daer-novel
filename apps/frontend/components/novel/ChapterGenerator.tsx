@@ -179,6 +179,61 @@ export default function ChapterGenerator({
       setActiveVolumeForChapters(null);
     });
 
+    // Check for running tasks on mount (recovery after page refresh/close)
+    const checkRunningTasks = async () => {
+      try {
+        // Check for any running content generation tasks
+        const response = await tasksAPI.getRunningTasks(novelId);
+        const runningTasks = response.data || [];
+
+        // Find content generation tasks
+        const contentTasks = runningTasks.filter(
+          (task: any) => task.type === "content" && task.chapterId,
+        );
+
+        if (contentTasks.length > 0) {
+          // Subscribe to running tasks and restore UI state
+          contentTasks.forEach((task: any) => {
+            newSocket.emit("subscribe:task", task.id);
+            // Restore the generating state for this chapter
+            setGeneratingChapterId(task.chapterId);
+            setGenerationProgress(task.progress || 0);
+            setGenerationStatus("恢复连接，继续监听进度...");
+          });
+          toast.info(
+            `检测到 ${contentTasks.length} 个正在生成的章节，已恢复监听`,
+          );
+        }
+
+        // Also check for structure generation tasks
+        const structureTasks = runningTasks.filter(
+          (task: any) =>
+            task.type === "chapter_planning" || task.type === "volume_planning",
+        );
+
+        if (structureTasks.length > 0) {
+          structureTasks.forEach((task: any) => {
+            newSocket.emit("subscribe:task", task.id);
+          });
+          setIsGeneratingStructure(true);
+          setGenerationStatus("恢复连接，继续监听规划进度...");
+          toast.info("检测到正在进行的规划任务，已恢复监听");
+        }
+      } catch (error) {
+        console.error("Failed to check running tasks:", error);
+      }
+    };
+
+    // Run task recovery after socket connects
+    newSocket.on("connect", () => {
+      checkRunningTasks();
+    });
+
+    // Also run immediately if already connected
+    if (newSocket.connected) {
+      checkRunningTasks();
+    }
+
     return () => {
       newSocket.close();
     };
@@ -342,6 +397,43 @@ export default function ChapterGenerator({
     if (!activeChapterForConfig) return;
 
     const chapterId = activeChapterForConfig.id;
+
+    // Check if there's already a running task for this chapter
+    try {
+      const taskRes = await tasksAPI.getRecentChapterTask(novelId, chapterId);
+      const recentTask = taskRes.data?.[0];
+
+      if (recentTask) {
+        if (recentTask.status === "running") {
+          // Task is already running, just subscribe to it
+          setActiveChapterForConfig(null);
+          setGeneratingChapterId(chapterId);
+          setGenerationProgress(recentTask.progress || 0);
+          setGenerationStatus("章节正在生成中，已恢复监听");
+          if (socket) {
+            socket.emit("subscribe:task", recentTask.id);
+          }
+          toast.info("该章节已在生成中，已恢复监听");
+          return;
+        } else if (recentTask.status === "completed") {
+          // Task completed while offline, refresh the data
+          toast.info("检测到该章节在离线期间已完成，正在刷新...");
+          setActiveChapterForConfig(null);
+          onUpdate();
+          return;
+        } else if (recentTask.status === "failed") {
+          // Task failed while offline, ask user if they want to retry
+          setActiveChapterForConfig(null);
+          onUpdate();
+          toast.error(`上次生成失败: ${recentTask.error || "未知错误"}`);
+          return;
+        }
+      }
+    } catch (checkError) {
+      // Ignore check errors, proceed with normal flow
+      console.error("Failed to check recent task:", checkError);
+    }
+
     setActiveChapterForConfig(null); // Close modal
 
     setGeneratingChapterId(chapterId);
