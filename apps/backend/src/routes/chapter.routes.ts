@@ -7,6 +7,34 @@ import { OocAgent } from "../services/ai/agents";
 
 const router: Router = Router();
 
+// Maximum number of snapshots per chapter
+const MAX_SNAPSHOTS = 30;
+
+/**
+ * Enforce snapshot limit for a chapter - deletes oldest snapshots if over limit
+ * This should be called BEFORE inserting a new snapshot
+ * Ensures that after insertion, there will be at most MAX_SNAPSHOTS snapshots
+ */
+async function enforceSnapshotLimit(chapterId: string): Promise<void> {
+  const existing = await db.query.chapterSnapshots.findMany({
+    where: eq(schema.chapterSnapshots.chapterId, chapterId),
+    orderBy: [desc(schema.chapterSnapshots.createdAt)],
+  });
+
+  // Calculate how many to delete: if we have 30 or more, we need to delete enough
+  // to make room for the new one, keeping at most MAX_SNAPSHOTS - 1 existing ones
+  // After insertion, total will be at most MAX_SNAPSHOTS
+  if (existing.length >= MAX_SNAPSHOTS) {
+    const numToKeep = MAX_SNAPSHOTS - 1; // Keep room for the new snapshot
+    const toDelete = existing.slice(numToKeep);
+    for (const snap of toDelete) {
+      await db
+        .delete(schema.chapterSnapshots)
+        .where(eq(schema.chapterSnapshots.id, snap.id));
+    }
+  }
+}
+
 // ========= Analysis & Checking Routes =========
 
 // POST /chapters/:id/ooc-check - Check text for out-of-character behavior
@@ -172,19 +200,8 @@ router.post("/:id/snapshots", async (req: AuthRequest, res, next) => {
       return;
     }
 
-    // Limit to 30 snapshots per chapter
-    const existing = await db.query.chapterSnapshots.findMany({
-      where: eq(schema.chapterSnapshots.chapterId, id),
-      orderBy: [desc(schema.chapterSnapshots.createdAt)],
-    });
-    if (existing.length >= 30) {
-      const toDelete = existing.slice(29);
-      for (const snap of toDelete) {
-        await db
-          .delete(schema.chapterSnapshots)
-          .where(eq(schema.chapterSnapshots.id, snap.id));
-      }
-    }
+    // Enforce snapshot limit before creating new one
+    await enforceSnapshotLimit(id);
 
     const [snapshot] = await db
       .insert(schema.chapterSnapshots)
@@ -244,6 +261,9 @@ router.post(
         where: eq(schema.chapters.id, id),
       });
       if (currentChapter?.content) {
+        // Enforce snapshot limit before creating auto-save snapshot
+        await enforceSnapshotLimit(id);
+
         await db.insert(schema.chapterSnapshots).values({
           chapterId: id,
           novelId: currentChapter.novelId,
