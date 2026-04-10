@@ -87,6 +87,19 @@ export function startWorker(io: Server) {
           .set({ status: "running", updatedAt: new Date() })
           .where(eq(schema.tasks.id, taskId));
 
+        // Update chapter status to generating for content tasks
+        if (
+          chapterId &&
+          (type === "content" ||
+            type === "chapter_outline" ||
+            type === "chapter_detail")
+        ) {
+          await db
+            .update(schema.chapters)
+            .set({ status: "generating", updatedAt: new Date() })
+            .where(eq(schema.chapters.id, chapterId));
+        }
+
         // Emit progress update
         io.to(`task:${taskId}`).emit("task:progress", {
           taskId,
@@ -421,6 +434,19 @@ export function startWorker(io: Server) {
             updatedAt: new Date(),
           })
           .where(eq(schema.tasks.id, taskId));
+
+        // Update chapter status to failed for content tasks
+        if (
+          chapterId &&
+          (type === "content" ||
+            type === "chapter_outline" ||
+            type === "chapter_detail")
+        ) {
+          await db
+            .update(schema.chapters)
+            .set({ status: "failed", updatedAt: new Date() })
+            .where(eq(schema.chapters.id, chapterId));
+        }
 
         io.to(`task:${taskId}`).emit("task:failed", {
           taskId,

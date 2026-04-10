@@ -323,4 +323,116 @@ router.get("/tasks/:taskId", async (req: AuthRequest, res, next) => {
   }
 });
 
+// Sync task status - check for stale tasks and update chapter status
+router.post("/sync", async (_req: AuthRequest, res, next) => {
+  try {
+    // Find all tasks that are still running or queued
+    const activeTasks = await db.query.tasks.findMany({
+      where: (tasks, { inArray }) =>
+        inArray(tasks.status, ["running", "queued"]),
+    });
+
+    const syncResults: {
+      taskId: string;
+      oldStatus: string | null;
+      newStatus: string;
+      chapterId?: string | null;
+    }[] = [];
+
+    // Check each active task
+    for (const task of activeTasks) {
+      // Check if the task has been running for more than 10 minutes (stale)
+      const taskAge = Date.now() - new Date(task.updatedAt).getTime();
+      const isStale = taskAge > 10 * 60 * 1000; // 10 minutes
+
+      if (isStale) {
+        // Mark task as failed
+        await db
+          .update(schema.tasks)
+          .set({
+            status: "failed",
+            error: "Task timeout - browser disconnected",
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.tasks.id, task.id));
+
+        // If task has a chapter, update chapter status
+        if (task.chapterId) {
+          await db
+            .update(schema.chapters)
+            .set({ status: "failed", updatedAt: new Date() })
+            .where(eq(schema.chapters.id, task.chapterId));
+        }
+
+        syncResults.push({
+          taskId: task.id,
+          oldStatus: task.status,
+          newStatus: "failed",
+          chapterId: task.chapterId,
+        });
+      }
+    }
+
+    // Also check for chapters stuck in "generating" status without active tasks
+    const generatingChapters = await db.query.chapters.findMany({
+      where: eq(schema.chapters.status, "generating"),
+    });
+
+    for (const chapter of generatingChapters) {
+      // Check if there's an active task for this chapter
+      const activeTask = await db.query.tasks.findFirst({
+        where: (tasks, { and, eq, inArray }) =>
+          and(
+            eq(tasks.chapterId, chapter.id),
+            inArray(tasks.status, ["running", "queued"]),
+          ),
+      });
+
+      if (!activeTask) {
+        // No active task, reset chapter status to pending
+        await db
+          .update(schema.chapters)
+          .set({ status: "pending", updatedAt: new Date() })
+          .where(eq(schema.chapters.id, chapter.id));
+
+        syncResults.push({
+          taskId: "none",
+          oldStatus: "generating",
+          newStatus: "pending",
+          chapterId: chapter.id,
+        });
+      }
+    }
+
+    res.json({
+      synced: syncResults.length,
+      details: syncResults,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get active tasks for a novel
+router.get("/:novelId/tasks/active", async (req: AuthRequest, res, next) => {
+  try {
+    const { novelId } = req.params;
+
+    const activeTasks = await db.query.tasks.findMany({
+      where: (tasks, { and, eq, inArray }) =>
+        and(
+          eq(tasks.novelId, novelId),
+          inArray(tasks.status, ["running", "queued"]),
+        ),
+      with: {
+        chapter: true,
+      },
+    });
+
+    res.json(activeTasks);
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
