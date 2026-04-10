@@ -98,6 +98,18 @@ router.patch("/:id", async (req: AuthRequest, res, next) => {
     const { id } = req.params;
     const { title, content, outline } = req.body;
 
+    const existingChapter = await db.query.chapters.findFirst({
+      where: eq(schema.chapters.id, id),
+    });
+
+    if (!existingChapter) {
+      res.status(404).json({ error: "Chapter not found" });
+      return;
+    }
+
+    const contentChanged =
+      content !== undefined && content !== existingChapter.content;
+
     const [chapter] = await db
       .update(schema.chapters)
       .set({
@@ -106,14 +118,10 @@ router.patch("/:id", async (req: AuthRequest, res, next) => {
         outline,
         wordCount: content ? content.length : undefined,
         updatedAt: new Date(),
+        ...(contentChanged && { contentUpdatedAt: new Date() }),
       })
       .where(eq(schema.chapters.id, id))
       .returning();
-
-    if (!chapter) {
-      res.status(404).json({ error: "Chapter not found" });
-      return;
-    }
 
     res.json(chapter);
   } catch (error) {
@@ -261,6 +269,7 @@ router.post(
           content: snapshot.content,
           wordCount: snapshot.wordCount,
           updatedAt: new Date(),
+          contentUpdatedAt: new Date(),
         })
         .where(eq(schema.chapters.id, id))
         .returning();
