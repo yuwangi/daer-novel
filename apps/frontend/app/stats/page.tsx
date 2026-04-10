@@ -31,6 +31,7 @@ interface Chapter {
   order: number;
   status: string;
   updatedAt: string;
+  contentUpdatedAt: string | null;
 }
 
 interface Volume {
@@ -156,10 +157,11 @@ export default function StatsPage() {
   ).length;
   const totalNovels = novels.length;
 
-  // Calculate today's words from database (chapters updated today)
+  // Calculate today's words from database (chapters with content updated today)
+  // Use contentUpdatedAt to only count actual content changes, not just viewing
   const todayWords = useMemo(() => {
     return allChapters.reduce((sum, chapter) => {
-      if (chapter.updatedAt && isToday(chapter.updatedAt)) {
+      if (chapter.contentUpdatedAt && isToday(chapter.contentUpdatedAt)) {
         return sum + (chapter.wordCount || 0);
       }
       return sum;
