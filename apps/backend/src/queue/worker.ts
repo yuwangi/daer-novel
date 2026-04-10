@@ -16,7 +16,7 @@ import { retrieveRelevantKnowledge } from "../services/embedding";
 import { logger } from "../utils/logger";
 import { Server } from "socket.io";
 
-const connection = new IORedis({
+export const connection = new IORedis({
   host: process.env.REDIS_HOST || "localhost",
   port: parseInt(process.env.REDIS_PORT || "6379"),
   maxRetriesPerRequest: null,
@@ -74,13 +74,62 @@ export interface TaskPayload {
   input?: any;
 }
 
+function getIdempotentKey(
+  type: string,
+  novelId: string,
+  taskId: string,
+  chapterId?: string,
+  input?: any,
+): string {
+  switch (type) {
+    case "outline":
+      return `outline:${novelId}`;
+    case "title":
+      return `titles:${novelId}`;
+    case "volume_planning":
+      return `volumes:${novelId}`;
+    case "chapter_planning":
+      return `chapters:${input?.volumeId || ""}`;
+    case "content":
+      return `content:${chapterId}`;
+    default:
+      return `task:${taskId}`;
+  }
+}
+
+async function releaseIdempotentLock(key: string): Promise<void> {
+  await connection.del(`idempotent:${key}`);
+}
+
 export function startWorker(io: Server) {
   const worker = new Worker<TaskPayload>(
     "novel-generation",
     async (job: Job<TaskPayload>) => {
       const { taskId, novelId, chapterId, type, input } = job.data;
+      const lockKey = getIdempotentKey(type, novelId, taskId, chapterId, input);
 
       try {
+        const task = await db.query.tasks.findFirst({
+          where: eq(schema.tasks.id, taskId),
+        });
+
+        if (!task) {
+          await releaseIdempotentLock(lockKey);
+          throw new Error(`Task ${taskId} not found`);
+        }
+
+        if (task.status !== "queued") {
+          logger.warn(
+            `Task ${taskId} is not in queued state (current: ${task.status}), marking as cancelled`,
+          );
+          await db
+            .update(schema.tasks)
+            .set({ status: "cancelled", updatedAt: new Date() })
+            .where(eq(schema.tasks.id, taskId));
+          await releaseIdempotentLock(lockKey);
+          return;
+        }
+
         // Update task status to running
         await db
           .update(schema.tasks)
@@ -397,14 +446,16 @@ export function startWorker(io: Server) {
           })
           .where(eq(schema.tasks.id, taskId));
 
+        await releaseIdempotentLock(lockKey);
+
         io.to(`task:${taskId}`).emit("task:completed", {
           taskId,
           type,
           novelId,
+          chapterId,
           result,
         });
 
-        // Notify frontend to refresh
         io.emit("novel:updated", { novelId });
 
         logger.info(`Task ${taskId} completed successfully`);
@@ -412,7 +463,6 @@ export function startWorker(io: Server) {
       } catch (error: any) {
         logger.error(`Task ${taskId} failed:`, error);
 
-        // Update task as failed
         await db
           .update(schema.tasks)
           .set({
@@ -422,8 +472,13 @@ export function startWorker(io: Server) {
           })
           .where(eq(schema.tasks.id, taskId));
 
+        await releaseIdempotentLock(lockKey);
+
         io.to(`task:${taskId}`).emit("task:failed", {
           taskId,
+          type,
+          novelId,
+          chapterId,
           error: error.message,
         });
 

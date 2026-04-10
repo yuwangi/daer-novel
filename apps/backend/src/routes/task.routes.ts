@@ -1,32 +1,88 @@
 import { Router } from "express";
 import { db, schema } from "../database";
-import { eq } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { AuthRequest } from "../middleware/auth";
-import { novelQueue } from "../queue/worker";
+import { novelQueue, connection } from "../queue/worker";
 
 const router: Router = Router();
+
+async function checkAndSetIdempotentLock(
+  key: string,
+  ttlSeconds: number = 3600,
+): Promise<boolean> {
+  const result = await connection.set(
+    `idempotent:${key}`,
+    "1",
+    "EX",
+    ttlSeconds,
+    "NX",
+  );
+  return result === "OK";
+}
+
+async function releaseIdempotentLock(key: string): Promise<void> {
+  await connection.del(`idempotent:${key}`);
+}
+
+async function hasActiveTask(
+  novelId: string,
+  taskType: (typeof schema.tasks.type.enumValues)[number],
+  chapterId?: string,
+): Promise<boolean> {
+  const whereConditions = [
+    eq(schema.tasks.novelId, novelId),
+    eq(schema.tasks.type, taskType),
+    inArray(schema.tasks.status, ["queued", "running"]),
+  ];
+
+  if (chapterId) {
+    whereConditions.push(eq(schema.tasks.chapterId, chapterId));
+  }
+
+  const existingTask = await db.query.tasks.findFirst({
+    where: and(...whereConditions),
+  });
+
+  return !!existingTask;
+}
 
 // Generate outline
 router.post(
   "/:novelId/generate/outline",
   async (req: AuthRequest, res, next) => {
     try {
-      // Create task
+      const { novelId } = req.params;
+      const lockKey = `outline:${novelId}`;
+
+      if (!(await checkAndSetIdempotentLock(lockKey))) {
+        res.status(409).json({
+          error: "该小说的大纲生成任务已在处理中",
+        });
+        return;
+      }
+
+      if (await hasActiveTask(novelId, "outline")) {
+        await releaseIdempotentLock(lockKey);
+        res.status(409).json({
+          error: "该小说的大纲生成任务已在队列中",
+        });
+        return;
+      }
+
       const [task] = await db
         .insert(schema.tasks)
         .values({
-          novelId: req.params.novelId,
+          novelId,
           type: "outline",
           status: "queued",
         })
         .returning();
 
-      // Queue job
       await novelQueue.add(
         "generate-outline",
         {
           taskId: task.id,
-          novelId: req.params.novelId,
+          novelId,
           type: "outline",
         },
         {
@@ -50,12 +106,29 @@ router.post(
   "/:novelId/generate/titles",
   async (req: AuthRequest, res, next) => {
     try {
+      const { novelId } = req.params;
       const { outline } = req.body;
+      const lockKey = `titles:${novelId}`;
+
+      if (!(await checkAndSetIdempotentLock(lockKey))) {
+        res.status(409).json({
+          error: "该小说的标题生成任务已在处理中",
+        });
+        return;
+      }
+
+      if (await hasActiveTask(novelId, "title")) {
+        await releaseIdempotentLock(lockKey);
+        res.status(409).json({
+          error: "该小说的标题生成任务已在队列中",
+        });
+        return;
+      }
 
       const [task] = await db
         .insert(schema.tasks)
         .values({
-          novelId: req.params.novelId,
+          novelId,
           type: "title",
           status: "queued",
         })
@@ -65,7 +138,7 @@ router.post(
         "generate-titles",
         {
           taskId: task.id,
-          novelId: req.params.novelId,
+          novelId,
           type: "title",
           input: { outline },
         },
@@ -90,12 +163,29 @@ router.post(
   "/:novelId/generate/volumes",
   async (req: AuthRequest, res, next) => {
     try {
+      const { novelId } = req.params;
       const { outline } = req.body;
+      const lockKey = `volumes:${novelId}`;
+
+      if (!(await checkAndSetIdempotentLock(lockKey))) {
+        res.status(409).json({
+          error: "该小说的分卷规划任务已在处理中",
+        });
+        return;
+      }
+
+      if (await hasActiveTask(novelId, "volume_planning")) {
+        await releaseIdempotentLock(lockKey);
+        res.status(409).json({
+          error: "该小说的分卷规划任务已在队列中",
+        });
+        return;
+      }
 
       const [task] = await db
         .insert(schema.tasks)
         .values({
-          novelId: req.params.novelId,
+          novelId,
           type: "volume_planning",
           status: "queued",
         })
@@ -105,7 +195,7 @@ router.post(
         "generate-volumes",
         {
           taskId: task.id,
-          novelId: req.params.novelId,
+          novelId,
           type: "volume_planning",
           input: {
             outline,
@@ -133,13 +223,30 @@ router.post(
   "/:novelId/generate/chapters",
   async (req: AuthRequest, res, next) => {
     try {
+      const { novelId } = req.params;
       const { outline, volumeId, additionalRequirements, targetCount } =
         req.body;
+      const lockKey = `chapters:${volumeId}`;
+
+      if (!(await checkAndSetIdempotentLock(lockKey))) {
+        res.status(409).json({
+          error: "该分卷的章节规划任务已在处理中",
+        });
+        return;
+      }
+
+      if (await hasActiveTask(novelId, "chapter_planning")) {
+        await releaseIdempotentLock(lockKey);
+        res.status(409).json({
+          error: "该分卷的章节规划任务已在队列中",
+        });
+        return;
+      }
 
       const [task] = await db
         .insert(schema.tasks)
         .values({
-          novelId: req.params.novelId,
+          novelId,
           type: "chapter_planning",
           status: "queued",
         })
@@ -149,7 +256,7 @@ router.post(
         "generate-chapters",
         {
           taskId: task.id,
-          novelId: req.params.novelId,
+          novelId,
           type: "chapter_planning",
           input: { outline, volumeId, additionalRequirements, targetCount },
         },
@@ -174,11 +281,29 @@ router.post(
   "/:novelId/chapters/:chapterId/generate",
   async (req: AuthRequest, res, next) => {
     try {
+      const { novelId, chapterId } = req.params;
+      const lockKey = `content:${chapterId}`;
+
+      if (!(await checkAndSetIdempotentLock(lockKey))) {
+        res.status(409).json({
+          error: "该章节的内容生成任务已在处理中",
+        });
+        return;
+      }
+
+      if (await hasActiveTask(novelId, "content", chapterId)) {
+        await releaseIdempotentLock(lockKey);
+        res.status(409).json({
+          error: "该章节的内容生成任务已在队列中",
+        });
+        return;
+      }
+
       const [task] = await db
         .insert(schema.tasks)
         .values({
-          novelId: req.params.novelId,
-          chapterId: req.params.chapterId,
+          novelId,
+          chapterId,
           type: "content",
           status: "queued",
         })
@@ -188,9 +313,10 @@ router.post(
         "generate-content",
         {
           taskId: task.id,
-          novelId: req.params.novelId,
-          chapterId: req.params.chapterId,
+          novelId,
+          chapterId,
           type: "content",
+          input: req.body,
         },
         {
           attempts: 3,
