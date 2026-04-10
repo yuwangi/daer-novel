@@ -12,9 +12,51 @@ if [ -z "$TASK_ID" ]; then
     exit 1
 fi
 
+# ==========================================
+# 项目类型及依赖检测
+# ==========================================
+BASE_IMAGE="ubuntu:22.04"
+INSTALL_NODE=""
+INSTALL_PNPM=""
+DB_PACKAGES="git curl tmux build-essential ca-certificates"
+SETUP_COMMANDS=""
+POST_COPY_COMMANDS=""
+HAS_POSTGRES=false
+HAS_REDIS=false
+
+# 1. 检测 Node.js
+if [ -f "package.json" ]; then
+    echo "检测到 Node.js 项目..."
+    INSTALL_NODE="RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs"
+    if [ -f "pnpm-lock.yaml" ]; then
+        INSTALL_PNPM="RUN npm install -g pnpm"
+        POST_COPY_COMMANDS="$POST_COPY_COMMANDS\nRUN pnpm install"
+    elif [ -f "yarn.lock" ]; then
+        INSTALL_PNPM="RUN npm install -g yarn"
+        POST_COPY_COMMANDS="$POST_COPY_COMMANDS\nRUN yarn install"
+    else
+        POST_COPY_COMMANDS="$POST_COPY_COMMANDS\nRUN npm install"
+    fi
+fi
+
+# 2. 检测数据库需求
+if [ -f "docker-compose.yml" ]; then
+    if grep -qE "postgres|pgvector" docker-compose.yml; then
+        HAS_POSTGRES=true
+        DB_PACKAGES="$DB_PACKAGES postgresql postgresql-contrib"
+        if grep -q "pgvector" docker-compose.yml; then
+            DB_PACKAGES="$DB_PACKAGES postgresql-server-dev-all"
+            SETUP_COMMANDS="$SETUP_COMMANDS\n# 安装 pgvector\nRUN git clone --branch v0.6.0 https://github.com/pgvector/pgvector.git /tmp/pgvector && cd /tmp/pgvector && make clean && make && make install"
+        fi
+    fi
+    if grep -q "redis" docker-compose.yml; then
+        HAS_REDIS=true
+        DB_PACKAGES="$DB_PACKAGES redis-server"
+    fi
+fi
+
 # 创建目录结构
 echo "正在为题目 '$TASK_ID' 创建目录结构并复制源码..."
-
 mkdir -p "$TASK_ID/environment/repo"
 
 # 创建 instruction.md
@@ -23,50 +65,97 @@ cat <<EOF > "$TASK_ID/instruction.md"
 (请在此处输入用户输入的任务 Prompt)
 EOF
 
+# 生成一键启动脚本 start_task.sh
+START_SCRIPT_PATH="$TASK_ID/environment/repo/start_task.sh"
+cat <<EOF > "$START_SCRIPT_PATH"
+#!/bin/bash
+set -e
+
+echo "--- 正在启动系统服务 ---"
+$( [ "$HAS_POSTGRES" = true ] && echo "service postgresql start" )
+$( [ "$HAS_REDIS" = true ] && echo "service redis-server start" )
+
+$( [ "$HAS_POSTGRES" = true ] && echo 'echo "等待数据库就绪..."
+until pg_isready; do
+  sleep 2
+done' )
+
+echo "--- 正在启动项目应用 ---"
+if [ -f "package.json" ]; then
+    # 尝试运行迁移 (如果存在 backend 过滤器)
+    if pnpm --filter backend run | grep -q "migration:run"; then
+        echo "发现迁移脚本，正在运行..."
+        pnpm --filter backend migration:run || echo "警告: 迁移阶段出现问题"
+    fi
+
+    # 启动应用
+    echo "并发启动前端和后端..."
+    pnpm --filter backend dev &
+    pnpm --filter frontend dev &
+fi
+
+# 保持前台运行
+wait
+EOF
+chmod +x "$START_SCRIPT_PATH"
+
 # 创建 Dockerfile
 cat <<EOF > "$TASK_ID/environment/Dockerfile"
-# 基础镜像（自定义，可选择一个最合适当前项目的base image）
-FROM ubuntu:22.04
+# 基础镜像
+FROM $BASE_IMAGE
 
-# 设置工作目录 (必须为 /app)
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 设置工作目录
 WORKDIR /app
 
-# 把宿主机当前目录下 repo 文件夹内的“所有内容”复制到容器的 /app 目录下
-COPY repo/ ./
-
-# 安装必要环境 等操作
+# 1. 安装基础工具及系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \\
-    tmux \\
-    git \\
-    curl \\
-    python3 \\
-    python3-pip \\
+    $DB_PACKAGES \\
     && rm -rf /var/lib/apt/lists/*
 
-# (可选) 如果有特定的构建命令，请添加在此处
-# RUN ...
+# 2. 安装 Node.js 环境
+$INSTALL_NODE
+$INSTALL_PNPM
+
+# 3. 项目特定设置
+$(echo -e "$SETUP_COMMANDS")
+
+# 4. 复制源码
+# 注意: 为了保证 start_task.sh 权限，我们在复制后显式赋予执行权
+COPY repo/ ./
+RUN chmod +x start_task.sh
+
+# 5. 预安装项目依赖
+$(echo -e "$POST_COPY_COMMANDS")
+
+# 一键启动指令
+CMD ["/bin/bash", "start_task.sh"]
 EOF
 
-# 复制当前目录内容到 repo (排除 node_modules, 当前及以往的任务文件夹, 脚本本身和 .git)
-# 我们排除所有包含 environment/ 目录的文件夹，因为它们通常是其他任务文件夹
+# 复制源码
 rsync -a --exclude="node_modules" \
          --exclude=".git" \
          --exclude="$TASK_ID" \
          --exclude="init_task.sh" \
          --exclude="test*" \
+         --exclude="dogfooding-*" \
          --exclude="target" \
          --exclude="dist" \
          --exclude="build" \
          ./ "$TASK_ID/environment/repo/"
 
-# 初始化 git 仓库并提交
+# 初始化 git
 (
     cd "$TASK_ID/environment/repo" || exit
     git init
     git add .
-    git commit -m "initial commit: project snapshot"
+    git commit -m "initial commit: one-click full-stack project"
 )
 
-echo "完成！目录结构已创建在: $TASK_ID/"
-echo "结构如下:"
-ls -R "$TASK_ID"
+echo "=========================================================="
+echo "完成！项目环境已创建在: $TASK_ID/"
+echo "您可以运行以下命令一键构建并启动项目："
+echo "----------------------------------------------------------"
+echo "cd $TASK_ID/environment && docker build -t $TASK_ID . && docker run -it -p 8001:8001 -p 8002:8002 $TASK_ID"
+echo "----------------------------------------------------------"
