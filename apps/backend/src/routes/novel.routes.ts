@@ -215,6 +215,30 @@ router.get("/", async (req: AuthRequest, res, next) => {
   }
 });
 
+// Get all novels with details (volumes and chapters) for user - Optimized for stats page
+router.get("/with-details", async (req: AuthRequest, res, next) => {
+  try {
+    const novels = await db.query.novels.findMany({
+      where: eq(schema.novels.userId, req.userId!),
+      orderBy: (novels, { desc }) => [desc(novels.createdAt)],
+      with: {
+        volumes: {
+          with: {
+            chapters: {
+              orderBy: (chapters, { asc }) => [asc(chapters.order)],
+            },
+          },
+          orderBy: (volumes, { asc }) => [asc(volumes.order)],
+        },
+      },
+    });
+
+    res.json(novels);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get single novel
 router.get("/:id", async (req: AuthRequest, res, next) => {
   try {
@@ -443,32 +467,108 @@ router.post("/:id/characters", async (req: AuthRequest, res, next) => {
   }
 });
 
-// Update character
+// Update character - validates that related characters exist
 router.patch(
   "/:novelId/characters/:characterId",
   async (req: AuthRequest, res, next) => {
     try {
-      const [character] = await db
-        .update(schema.characters)
-        .set({ ...req.body, updatedAt: new Date() })
-        .where(eq(schema.characters.id, req.params.characterId))
-        .returning();
+      const { novelId, characterId } = req.params;
+      const { relationships, ...otherData } = req.body;
 
-      res.json(character);
+      // Validate relationships if provided
+      if (
+        relationships &&
+        Array.isArray(relationships) &&
+        relationships.length > 0
+      ) {
+        // Get all valid character IDs for this novel
+        const allCharacters = await db.query.characters.findMany({
+          where: eq(schema.characters.novelId, novelId),
+          columns: { id: true },
+        });
+        const validCharacterIds = new Set(allCharacters.map((c) => c.id));
+
+        // Filter out invalid relationships (referencing non-existent characters)
+        const validRelationships = relationships.filter(
+          (r: { characterId: string }) => {
+            const isValid = validCharacterIds.has(r.characterId);
+            if (!isValid) {
+              console.warn(
+                `Filtering out invalid relationship: character ${r.characterId} does not exist in novel ${novelId}`,
+              );
+            }
+            return isValid;
+          },
+        );
+
+        // Check if any relationships were filtered out
+        if (validRelationships.length !== relationships.length) {
+          console.warn(
+            `Some relationships were removed because they referenced non-existent characters`,
+          );
+        }
+
+        const [character] = await db
+          .update(schema.characters)
+          .set({
+            ...otherData,
+            relationships: validRelationships,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.characters.id, characterId))
+          .returning();
+
+        res.json(character);
+      } else {
+        const [character] = await db
+          .update(schema.characters)
+          .set({ ...req.body, updatedAt: new Date() })
+          .where(eq(schema.characters.id, characterId))
+          .returning();
+
+        res.json(character);
+      }
     } catch (error) {
       next(error);
     }
   },
 );
 
-// Delete character
+// Delete character - also cleans up relationships pointing to this character
 router.delete(
   "/:novelId/characters/:characterId",
   async (req: AuthRequest, res, next) => {
     try {
+      const { novelId, characterId } = req.params;
+
+      // 1. Remove references to this character from other characters' relationships
+      const allCharacters = await db.query.characters.findMany({
+        where: eq(schema.characters.novelId, novelId),
+      });
+
+      for (const character of allCharacters) {
+        if (character.relationships && character.relationships.length > 0) {
+          const filteredRelationships = character.relationships.filter(
+            (r: { characterId: string }) => r.characterId !== characterId,
+          );
+
+          // Only update if there were changes
+          if (filteredRelationships.length !== character.relationships.length) {
+            await db
+              .update(schema.characters)
+              .set({
+                relationships: filteredRelationships,
+                updatedAt: new Date(),
+              })
+              .where(eq(schema.characters.id, character.id));
+          }
+        }
+      }
+
+      // 2. Delete the character
       await db
         .delete(schema.characters)
-        .where(eq(schema.characters.id, req.params.characterId));
+        .where(eq(schema.characters.id, characterId));
 
       res.status(204).send();
     } catch (error) {
