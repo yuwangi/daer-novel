@@ -139,6 +139,9 @@ export default function ChapterGenerator({
   const [contentOutline, setContentOutline] = useState("");
   const [contentInstructions, setContentInstructions] = useState("");
 
+  // Task state version (used to force re-check of localStorage
+  const [taskStateVersion, setTaskStateVersion] = useState(0);
+
   // Persist task state to localStorage
   const saveTaskToStorage = useCallback(
     (taskData: Omit<PersistedTaskState, "timestamp">) => {
@@ -149,6 +152,8 @@ export default function ChapterGenerator({
           timestamp: Date.now(),
         };
         localStorage.setItem(key, JSON.stringify(state));
+        // Force re-check of task state
+        setTaskStateVersion((prev) => prev + 1);
       } catch (e) {
         console.warn("Failed to save task state to localStorage:", e);
       }
@@ -162,6 +167,8 @@ export default function ChapterGenerator({
       try {
         const key = getStorageKey(novelId, type);
         localStorage.removeItem(key);
+        // Force re-check of task state
+        setTaskStateVersion((prev) => prev + 1);
       } catch (e) {
         console.warn("Failed to clear task state from localStorage:", e);
       }
@@ -393,7 +400,12 @@ export default function ChapterGenerator({
   }, [volumes]);
 
   // Check if there is an active volume planning task
+  // Using taskStateVersion as dependency to force re-check when localStorage changes
   const hasActiveVolumePlanningTask = useMemo(() => {
+    // Just reference taskStateVersion to make it a dependency
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _version = taskStateVersion;
+
     const storedTask = getTaskFromStorage(TASK_TYPES.VOLUME_PLANNING);
     if (storedTask) {
       const isActive =
@@ -401,7 +413,7 @@ export default function ChapterGenerator({
       return isActive;
     }
     return false;
-  }, [getTaskFromStorage]);
+  }, [taskStateVersion, getTaskFromStorage]);
 
   // Reset confirmation state when modal opens
   useEffect(() => {
