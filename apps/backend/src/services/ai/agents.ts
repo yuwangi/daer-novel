@@ -66,18 +66,31 @@ export class OutlineAgent extends BaseAgent {
   }
 
   protected buildSystemPrompt(context: AgentContext): string {
-    return `你是一位资深网络小说大纲策划师。你的任务是根据小说设定生成完整的故事大纲。
+    const targetWords = context.novel.targetWords || 100000;
+    const avgChapterWords = context.novel.minChapterWords || 3000;
+    const estimatedChapters = Math.ceil(targetWords / avgChapterWords);
+    const phasesCount = this._calculatePhaseCount(targetWords);
 
+    return `你是一位世界级的网络小说结构大师和情节建筑师。你的任务是为《${context.novel.title}》创建一个**极度详细、事件驱动、可直接扩写成章节**的结构化大纲。
+
+====【核心原则】====
+1. **大纲必须细到可以直接扩写**：每个事件节点都应该包含足够的细节，让作者（或AI）可以直接据此写出章节正文，无需再构思"发生了什么"。
+2. **事件链必须完整**：采用因果关系链设计，每个事件都有明确的"触发条件→核心动作→即时后果→长远影响"。
+3. **拒绝模糊表述**：禁止使用"主角经历了一些冒险"、"剧情逐渐展开"这类空泛描述。每个节点都必须是具体的、可执行的事件。
+4. **悬念钩子前置**：每一个阶段结束时必须设计强有力的钩子，让读者迫切想知道下一章发生了什么。
+5. **角色弧线绑定事件**：角色的成长、变化、抉择必须与具体事件绑定，而不是孤立的"角色成长了"。
+
+====【小说基础设定】====
 小说标题：${context.novel.title}
 小说类型：${context.novel.genre?.join("、")}
 风格标签：${context.novel.style?.join("、")}
-目标字数：${context.novel.targetWords}字
+目标字数：${targetWords}字（约${estimatedChapters}章）
 背景设定：${context.novel.background}
 
 ${
   context.novel.worldSettings
     ? `
-世界观设定：
+【世界观设定】
 - 时间背景：${context.novel.worldSettings.timeBackground}
 - 世界规则：${context.novel.worldSettings.worldRules?.join("；")}
 - 力量体系：${context.novel.worldSettings.powerSystem}
@@ -89,8 +102,14 @@ ${
 ${
   context.characters && context.characters.length > 0
     ? `
-人物信息：
-${context.characters.map((c) => `- ${c.name}（${c.role}）：${c.personality?.join("、")}`).join("\n")}
+【核心人物设定】
+${context.characters.map((c) => `
+[${c.role}] ${c.name}
+  性格：${c.personality?.join("、")}
+  能力：${JSON.stringify(c.abilities)}
+  当前状态：${c.currentState || "未设定"}
+  关系：${c.relationships ? c.relationships.map(r => `${r.characterId}: ${r.relation}`).join("，") : "暂无"}
+`).join("\n")}
 `
     : ""
 }
@@ -98,20 +117,206 @@ ${context.characters.map((c) => `- ${c.name}（${c.role}）：${c.personality?.j
 ${
   context.knowledgeBase && context.knowledgeBase.length > 0
     ? `
-额外知识库：
-${context.knowledgeBase.join("\n\n")}
+【额外知识库参考】
+${context.knowledgeBase.join("\n\n---\n\n")}
 `
     : ""
 }
 
-请生成一个结构完整、逻辑清晰的故事大纲，包括：
-1. 故事主线
-2. 主要冲突
-3. 关键转折点
-4. 高潮设计
-5. 结局方向
+====【叙事结构要求】====
+将故事划分为 **${phasesCount}个阶段**，遵循经典的五幕结构但根据字数灵活调整：
 
-大纲应该支撑${context.novel.targetWords}字的长篇连载。`;
+1. **开篇阶段（Exposition）**：约占总字数的15-20%
+   - 建立世界、引入主角、展示日常
+   - 必须设计"初始状态被打破"的触发事件
+   - 每一个世界观元素都必须通过具体事件展示，而非纯说明
+
+2. **上升阶段（Rising Action）**：约占总字数的40-50%
+   - 这是故事的主体，必须包含**层层递进的事件链**
+   - 每个小事件的失败/成功必须直接影响下一个事件的难度
+   - 必须设计"中点反转"：故事进行到一半时，主角的认知或处境发生根本性改变
+
+3. **高潮阶段（Climax）**：约占总字数的15-20%
+   - 核心冲突的最终爆发
+   - 必须是"不可逆转"的事件：主角做出无法回头的选择，或世界发生永久性改变
+   - 高潮内部也要有节奏：小高潮→喘息→更大高潮→最终对决
+
+4. **回落阶段（Falling Action）**：约占总字数的10-15%
+   - 处理高潮的余波
+   - 展示"世界变了"的具体表现
+   - 收束次要情节线
+
+5. **结局阶段（Resolution）**：约占总字数的5-10%
+   - 主角的最终状态与开篇形成对比
+   - 必须有"余韵"：不是简单的结束，而是让读者回味的场景
+   - 如果有续作可能，设计开放式钩子但不影响本故事的完整性
+
+====【单个事件的必填字段】====
+每个具体事件必须包含以下要素，缺一不可：
+
+1. **事件标题**：简洁但具体（如"主角在拍卖会遭遇暗杀"而非"主角遇到麻烦"）
+2. **详细描述**：80-150字，具体到"谁说了什么、做了什么、结果如何"
+3. **涉及角色**：列出所有出场角色，并简要说明他们在本事件中的角色
+4. **冲突类型**：
+   - internal（内心冲突：抉择、信念动摇、恐惧等）
+   - external（外部冲突：战斗、追逐、谈判等）
+   - relationship（关系冲突：信任破裂、合作瓦解、爱恨纠葛等）
+   - mystery（悬疑冲突：解谜、调查、真相揭露等）
+5. **转折点**：本事件中最关键的"意外"或"抉择"，是事件从量变到质变的点
+6. **情感变化**：主角及主要角色在事件前后的情绪状态变化（具体，而非"主角很生气"）
+7. **事件结果**：具体、可衡量的结果（如"主角获得了地图但失去了同伴"）
+8. **字数估算**：这个事件大约需要多少字来描写
+9. **下一事件线索**：本事件埋下的、将在未来事件中触发的伏笔（至少2条）
+10. **悬念钩子（可选但推荐）**：如果本事件是章节或阶段结尾，设计让读者欲罢不能的最后一句话或场景
+
+====【阶段级必填要素】====
+每个阶段除了包含事件列表，还必须明确：
+
+1. **阶段核心目标**：主角在这个阶段想要达成什么？（必须具体）
+2. **主要冲突源**：是谁/什么在阻止主角达成目标？
+3. **赌注（Stakes）**：如果主角失败了，会失去什么？（必须逐步升级）
+4. **角色发展节点**：这个阶段中，哪个角色会发生什么显著变化？通过哪个具体事件体现？
+5. **世界观推进**：这个阶段会揭露或展示哪些新的世界观元素？如何展示？
+6. **主题呼应**：这个阶段如何呼应小说的核心主题？
+7. **阶段间钩子**：这个阶段结束时，用什么事件或悬念让读者进入下一个阶段？
+
+====【输出格式要求】====
+【绝对重要】你必须以严格的 JSON 格式输出，不要包含任何额外的解释文字、问候语、Markdown代码块标记。直接输出纯净的 JSON 对象。
+
+JSON 结构必须严格遵循以下 schema：
+
+{
+  "version": "1.0",
+  "novelTitle": "小说标题",
+  "corePremise": "一句话概括核心故事 premise（ elevator pitch 级别）",
+  "centralTheme": "小说的核心主题（如："成长意味着接受不完美"、"权力的代价"）",
+  "narrativeArc": "描述整体叙事弧线的类型和特点",
+  "mainConflict": {
+    "type": "冲突类型（如："人 vs 人"、"人 vs 自我"、"人 vs 社会"、"人 vs 自然"）",
+    "description": "核心冲突的详细描述",
+    "escalatingSteps": ["冲突升级的关键步骤1", "步骤2", "至少5个具体步骤"]
+  },
+  "phases": [
+    {
+      "id": "phase_1",
+      "phaseName": "阶段名称（如："初入山门"、"暗流涌动"）",
+      "phaseType": "exposition | rising_action | climax | falling_action | resolution",
+      "startWordEstimate": 本阶段开始的字数位置（如0）,
+      "endWordEstimate": 本阶段结束的字数位置（如30000）,
+      "coreGoal": "主角在本阶段的核心目标（必须具体）",
+      "mainConflict": "本阶段的主要冲突是什么",
+      "stakes": "本阶段失败的后果",
+      "events": [
+        {
+          "id": "event_1_1",
+          "title": "事件具体标题",
+          "description": "80-150字的详细描述，具体到谁说了什么做了什么",
+          "characters": ["角色A", "角色B"],
+          "conflictType": "internal | external | relationship | mystery",
+          "turningPoint": "本事件的关键转折点/意外/抉择",
+          "emotionalShift": "角色的情感变化描述",
+          "outcome": "事件的具体结果",
+          "wordEstimate": 3000,
+          "nextEventHints": ["伏笔1", "伏笔2"],
+          "suspenseHook": "如果是结尾事件，这里写悬念钩子",
+          "worldBuildingDetails": "本事件展示了哪些世界观细节"
+        }
+      ],
+      "characterDevelopments": [
+        "通过事件X，角色A从胆小变得敢于承担责任",
+        "通过事件Y，角色B对主角的态度从怀疑变为信任"
+      ],
+      "worldBuildingAdvancements": [
+        "通过拍卖会场景展示了这个世界的货币体系和阶层差异",
+        "通过战斗场景具体展示了力量体系的运作方式"
+      ],
+      "thematicElements": [
+        "本阶段探讨了"勇气"的主题：主角在事件1中被迫面对恐惧",
+        "本阶段呼应了"代价"主题：主角获得力量但失去了某样东西"
+      ],
+      "interPhaseHook": "连接到下一阶段的钩子事件或悬念"
+    }
+  ],
+  "plotThreads": [
+    {
+      "id": "thread_main",
+      "threadName": "主线情节线名称",
+      "threadType": "main",
+      "description": "这条线的整体描述",
+      "phaseIds": ["phase_1", "phase_2", "phase_3"],
+      "eventIds": ["event_1_1", "event_2_3"],
+      "resolution": "这条线如何收尾",
+      "thematicSignificance": "这条线对主题的意义"
+    }
+  ],
+  "characterArcs": [
+    {
+      "characterName": "角色名",
+      "arcType": "弧线类型（如："成长弧"、"堕落弧"、"平坦弧"）",
+      "keyEvents": ["通过事件X发生变化", "通过事件Y进一步发展"],
+      "resolution": "弧线的最终状态"
+    }
+  ],
+  "worldBuildingReveals": [
+    {
+      "reveal": "揭示的内容",
+      "phaseId": "phase_2",
+      "eventId": "event_2_2",
+      "significance": "这个揭示的重要性"
+    }
+  ],
+  "pacingGuidelines": {
+    "overall": "整体节奏建议",
+    "phaseSpecific": [
+      {
+        "phaseId": "phase_1",
+        "pacing": "slow | medium | fast",
+        "recommendation": "具体建议"
+      }
+    ]
+  },
+  "cliffhangerPoints": [
+    {
+      "phaseId": "phase_1",
+      "eventId": "event_1_5",
+      "description": "悬念描述",
+      "purpose": "这个悬念的目的"
+    }
+  ],
+  "estimatedTotalWords": ${targetWords},
+  "chapterCountEstimate": ${estimatedChapters},
+  "phaseToChapterMapping": [
+    {
+      "phaseId": "phase_1",
+      "startChapter": 1,
+      "endChapter": 10
+    }
+  ]
+}
+
+====【质量检查清单】====
+在输出之前，请确保：
+
+1. [ ] 每个事件都有具体的"谁、在什么时间、在哪里、做了什么、为什么、结果如何"
+2. [ ] 事件之间有明确的因果链，而不是孤立的场景
+3. [ ] 冲突是逐步升级的，赌注越来越大
+4. [ ] 每个角色的弧线都绑定到具体事件，而非抽象描述
+5. [ ] 世界观是通过事件展示的，而非"信息 dumps"
+6. [ ] 每3-5个事件就有一个明显的转折点或反转
+7. [ ] 悬念钩子设计在每个阶段的结尾，以及关键章节的结尾
+8. [ ] 没有模糊、空泛的描述（如"主角经历了很多"）
+9. [ ] JSON 格式完全正确，没有语法错误
+10. [ ] 字数分配与目标${targetWords}字大致匹配
+
+现在，请开始生成这份极度详细、事件驱动的结构化大纲。`;
+  }
+
+  private _calculatePhaseCount(targetWords: number): number {
+    if (targetWords <= 50000) return 4;
+    if (targetWords <= 100000) return 5;
+    if (targetWords <= 200000) return 6;
+    if (targetWords <= 500000) return 7;
+    return 8;
   }
 
   protected buildUserPrompt(context: AgentContext, input: any): string {
@@ -120,20 +325,107 @@ ${context.knowledgeBase.join("\n\n")}
         ? { mode: input, existingOutline: "" }
         : input || { mode: "initial", existingOutline: "" };
 
+    const baseInstruction = `【重要提醒】
+1. 请直接输出纯净的 JSON，**绝对不要**包含任何 markdown 代码块标记（如 \`\`\`json），不要包含任何解释文字、问候语、思考过程。
+2. 你的唯一输出就是那个 JSON 对象本身。
+3. 确保每个事件都足够详细，可以直接用来扩写章节正文。
+4. 确保事件之间有明确的因果关系链。
+
+`;
+
     switch (mode) {
       case "expand":
-        return `基于以下现有大纲进行扩写，增加更多细节和情节点：\n\n${existingOutline}`;
+        return `${baseInstruction}【任务】基于以下现有大纲进行深度扩写。
+
+要求：
+1. 将原有模糊的情节节点拆分为具体的事件序列
+2. 为每个事件添加因果关系（触发条件、中间过程、后果）
+3. 增加角色在每个事件中的具体行为和对话线索
+4. 设计明确的悬念钩子
+
+【现有大纲参考】：
+${existingOutline}
+
+请输出扩展后的完整结构化 JSON 大纲。`;
+
       case "adjust_pace_fast":
-        return `调整以下大纲节奏，使其更加紧凑、爽快（删除拖沓情节，加快冲突爆发）：\n\n${existingOutline}`;
+        return `${baseInstruction}【任务】重新设计以下大纲，使其节奏更加紧凑爽快。
+
+调整方向：
+1. 删除或合并拖沓的过渡场景
+2. 让冲突更早、更猛烈地爆发
+3. 减少纯说明性段落，将世界观融入事件
+4. 增加每章结尾的悬念密度
+5. 确保每3个事件内就有一个小高潮或反转
+
+【原大纲参考】：
+${existingOutline}
+
+请输出节奏调整后的完整结构化 JSON 大纲。`;
+
       case "adjust_pace_slow":
-        return `调整以下大纲节奏，使其更加舒缓、细腻（增加铺垫和情感描写）：\n\n${existingOutline}`;
+        return `${baseInstruction}【任务】重新设计以下大纲，使其节奏更加舒缓细腻。
+
+调整方向：
+1. 增加场景的铺垫和氛围感描写
+2. 深入挖掘角色的内心活动和情感变化
+3. 为关键事件增加更多的酝酿过程
+4. 增加次要角色的互动场景
+5. 让世界观的揭示更加自然、渐进
+
+【原大纲参考】：
+${existingOutline}
+
+请输出节奏调整后的完整结构化 JSON 大纲。`;
+
       case "strengthen_conflict":
-        return `强化以下大纲的主线冲突，增加戏剧张力和主角面临的困境：\n\n${existingOutline}`;
+        return `${baseInstruction}【任务】强化以下大纲的主线冲突，增加戏剧张力。
+
+强化方向：
+1. 让反派更加主动、更加聪明，而不是被动等待主角挑战
+2. 增加主角的"失败"场景：让他们努力但仍然受挫
+3. 提高赌注：失败的后果越来越严重
+4. 设计"两难选择"：主角必须在两个都不想失去的选项中抉择
+5. 增加"信任破裂"或"盟友背叛"的情节线
+
+【原大纲参考】：
+${existingOutline}
+
+请输出冲突强化后的完整结构化 JSON 大纲。`;
+
       case "preserve_characters":
-        return `保留人物设定，重新生成大纲（保持角色性格和关系不变）：\n\n${existingOutline}`;
+        return `${baseInstruction}【任务】重新生成大纲，但必须严格保留以下人物设定。
+
+要求：
+1. 所有角色的性格、能力、关系必须保持不变
+2. 角色的行为必须严格符合其既定性格
+3. 但情节走向、事件安排可以完全重新设计
+4. 保持原有的角色弧线方向，但可以调整具体实现事件
+
+【原有人物与大纲参考】：
+${existingOutline}
+
+请输出保留人设但重新设计情节的完整结构化 JSON 大纲。`;
+
       case "initial":
       default:
-        return `请为《${context.novel.title}》生成完整的小说大纲。${existingOutline ? `\n\n参考已有剧情脉络：\n${existingOutline}` : ""}`;
+        let prompt = `${baseInstruction}【任务】为《${context.novel.title}》生成一份完整的、极度详细的、事件驱动的结构化小说大纲。
+
+【核心要求】：
+1. 每个事件节点必须具体到"谁、在什么情况下、做了什么、具体结果"
+2. 事件之间必须有明确的因果链：事件A的结果直接触发事件B
+3. 冲突必须层层升级：赌注越来越大，难度越来越高
+4. 角色的成长/变化必须绑定到具体事件，而非抽象描述
+5. 每3-5个事件设计一个反转或意外
+6. 每个阶段结尾必须有强有力的悬念钩子`;
+
+        if (existingOutline) {
+          prompt += `\n\n【参考剧情脉络】（请在此基础上扩展和细化，而非完全照搬）：
+${existingOutline}`;
+        }
+
+        prompt += `\n\n请输出完整的结构化 JSON 大纲。`;
+        return prompt;
     }
   }
 }

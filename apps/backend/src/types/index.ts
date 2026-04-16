@@ -75,3 +75,93 @@ export interface AIConfig {
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface OutlineEvent {
+  id: string;
+  title: string;
+  description: string;
+  characters: string[];
+  conflictType: 'internal' | 'external' | 'relationship' | 'mystery';
+  turningPoint: string;
+  emotionalShift: string;
+  outcome: string;
+  wordEstimate: number;
+  nextEventHints: string[];
+  suspenseHook?: string;
+  worldBuildingDetails?: string;
+}
+
+export interface OutlinePhase {
+  id: string;
+  phaseName: string;
+  phaseType: 'exposition' | 'rising_action' | 'climax' | 'falling_action' | 'resolution';
+  startWordEstimate: number;
+  endWordEstimate: number;
+  coreGoal: string;
+  mainConflict: string;
+  stakes: string;
+  events: OutlineEvent[];
+  characterDevelopments: string[];
+  worldBuildingAdvancements: string[];
+  thematicElements: string[];
+  interPhaseHook?: string;
+}
+
+export interface PlotThread {
+  id: string;
+  threadName: string;
+  threadType: 'main' | 'sub' | 'character' | 'world' | 'thematic';
+  description: string;
+  phaseIds: string[];
+  eventIds: string[];
+  resolution: string;
+  thematicSignificance: string;
+}
+
+export interface StructuredOutline {
+  version: '1.0';
+  novelTitle: string;
+  corePremise: string;
+  centralTheme: string;
+  narrativeArc: string;
+  mainConflict: {
+    type: string;
+    description: string;
+    escalatingSteps: string[];
+  };
+  phases: OutlinePhase[];
+  plotThreads: PlotThread[];
+  characterArcs: {
+    characterName: string;
+    arcType: string;
+    keyEvents: string[];
+    resolution: string;
+  }[];
+  worldBuildingReveals: {
+    reveal: string;
+    phaseId: string;
+    eventId: string;
+    significance: string;
+  }[];
+  pacingGuidelines: {
+    overall: string;
+    phaseSpecific: {
+      phaseId: string;
+      pacing: string;
+      recommendation: string;
+    }[];
+  };
+  cliffhangerPoints: {
+    phaseId: string;
+    eventId: string;
+    description: string;
+    purpose: string;
+  }[];
+  estimatedTotalWords: number;
+  chapterCountEstimate: number;
+  phaseToChapterMapping: {
+    phaseId: string;
+    startChapter: number;
+    endChapter: number;
+  }[];
+}

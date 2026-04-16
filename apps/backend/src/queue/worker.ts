@@ -1,7 +1,7 @@
 import { Queue, Worker, Job } from "bullmq";
 import IORedis from "ioredis";
 import { db, schema } from "../database";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { createAIProvider } from "../services/ai/ai-config";
 import {
   OutlineAgent,
@@ -129,19 +129,107 @@ export function startWorker(io: Server) {
               characters,
               knowledgeBase: kbOutline,
             });
+            
+            // 尝试解析结构化 JSON 大纲
+            let structuredOutline: any = null;
+            let parseError: string | null = null;
+            
+            try {
+              // 使用现有的 cleanJson 函数清理可能包含 markdown 的 JSON 字符串
+              const cleanedJson = cleanJson(result.content);
+              structuredOutline = JSON.parse(cleanedJson);
+              
+              // 验证基本结构
+              if (!structuredOutline.phases || !Array.isArray(structuredOutline.phases)) {
+                throw new Error("大纲缺少必要的 phases 字段或格式不正确");
+              }
+              
+              // 验证每个阶段都有事件
+              for (const phase of structuredOutline.phases) {
+                if (!phase.events || !Array.isArray(phase.events)) {
+                  throw new Error(`阶段 ${phase.phaseName || phase.id} 缺少 events 字段`);
+                }
+                if (phase.events.length === 0) {
+                  logger.warn(`阶段 ${phase.phaseName || phase.id} 的 events 数组为空`);
+                }
+              }
+              
+              logger.info(`大纲解析成功！包含 ${structuredOutline.phases.length} 个阶段，共 ${
+                structuredOutline.phases.reduce((acc: number, p: any) => acc + (p.events?.length || 0), 0)
+              } 个事件`);
+              
+            } catch (error: any) {
+              parseError = error.message;
+              logger.warn(`大纲 JSON 解析失败，将以纯文本格式保存。错误: ${error.message}`);
+              // 不要在这里抛出异常，而是记录警告并继续保存原始内容
+            }
+            
+            // 构建保存内容：优先使用格式化的 JSON，失败则使用原始内容
+            let saveContent: string;
+            let generationContext: any = {
+              mode: "initial",
+              parseError,
+              generatedAt: new Date().toISOString(),
+            };
+            
+            if (structuredOutline) {
+              // 美化输出，同时确保是有效的 JSON
+              saveContent = JSON.stringify(structuredOutline, null, 2);
+              
+              // 提取一些元数据到 generationContext 便于查询
+              generationContext = {
+                ...generationContext,
+                version: structuredOutline.version,
+                corePremise: structuredOutline.corePremise,
+                centralTheme: structuredOutline.centralTheme,
+                phaseCount: structuredOutline.phases?.length || 0,
+                totalEvents: structuredOutline.phases?.reduce(
+                  (acc: number, p: any) => acc + (p.events?.length || 0), 0
+                ) || 0,
+                estimatedTotalWords: structuredOutline.estimatedTotalWords,
+                chapterCountEstimate: structuredOutline.chapterCountEstimate,
+                isStructured: true,
+              };
+            } else {
+              // 解析失败，使用原始内容
+              saveContent = result.content;
+              generationContext.isStructured = false;
+            }
+            
+            // 获取当前最新版本号
+            const latestVersion = await db.query.outlineVersions.findFirst({
+              where: eq(schema.outlineVersions.novelId, novelId),
+              orderBy: [desc(schema.outlineVersions.version)],
+            });
+            
+            const newVersion = (latestVersion?.version || 0) + 1;
+            
             // Save outline
             await db.insert(schema.outlineVersions).values({
               novelId,
-              content: result.content,
-              version: 1,
+              content: saveContent,
+              version: newVersion,
               generationMode: "initial",
+              generationContext,
             });
-
+            
+            // 如果是结构化大纲，且有 cliffhangerPoints，也可以在这里做一些额外处理
+            // 比如：提取悬念点单独存储（可选优化）
+            
             // Update novel current version
             await db
               .update(schema.novels)
-              .set({ currentOutlineVersion: 1 })
+              .set({ currentOutlineVersion: newVersion })
               .where(eq(schema.novels.id, novelId));
+            
+            // 构建返回结果，包含结构化信息
+            result = {
+              ...result,
+              structuredOutline,
+              generationContext,
+              parseError,
+              isStructured: !!structuredOutline,
+            };
             break;
           }
 
