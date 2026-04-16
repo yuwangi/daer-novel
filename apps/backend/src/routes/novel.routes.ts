@@ -215,6 +215,38 @@ router.get("/", async (req: AuthRequest, res, next) => {
   }
 });
 
+// Get all novels with volumes and chapters for stats page (optimized batch query)
+router.get("/stats/batch", async (req: AuthRequest, res, next) => {
+  try {
+    const novels = await db.query.novels.findMany({
+      where: eq(schema.novels.userId, req.userId!),
+      orderBy: (novels, { desc }) => [desc(novels.createdAt)],
+      with: {
+        volumes: {
+          with: {
+            chapters: {
+              columns: {
+                id: true,
+                title: true,
+                wordCount: true,
+                order: true,
+                status: true,
+                updatedAt: true,
+              },
+              orderBy: (chapters, { asc }) => [asc(chapters.order)],
+            },
+          },
+          orderBy: (volumes, { asc }) => [asc(volumes.order)],
+        },
+      },
+    });
+
+    res.json(novels);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get single novel
 router.get("/:id", async (req: AuthRequest, res, next) => {
   try {
@@ -466,9 +498,35 @@ router.delete(
   "/:novelId/characters/:characterId",
   async (req: AuthRequest, res, next) => {
     try {
+      const { novelId, characterId } = req.params;
+
+      // First, clean up relationships in other characters that reference this character
+      const allCharacters = await db.query.characters.findMany({
+        where: eq(schema.characters.novelId, novelId),
+      });
+
+      for (const character of allCharacters) {
+        if (character.relationships && Array.isArray(character.relationships)) {
+          const filteredRelationships = character.relationships.filter(
+            (rel: any) => rel.characterId !== characterId,
+          );
+
+          if (filteredRelationships.length !== character.relationships.length) {
+            await db
+              .update(schema.characters)
+              .set({
+                relationships: filteredRelationships,
+                updatedAt: new Date(),
+              })
+              .where(eq(schema.characters.id, character.id));
+          }
+        }
+      }
+
+      // Then delete the character
       await db
         .delete(schema.characters)
-        .where(eq(schema.characters.id, req.params.characterId));
+        .where(eq(schema.characters.id, characterId));
 
       res.status(204).send();
     } catch (error) {

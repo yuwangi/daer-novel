@@ -4,6 +4,7 @@ import { db, schema } from "../database";
 import { eq, desc } from "drizzle-orm";
 import { createAIProvider } from "../services/ai/ai-config";
 import { OocAgent } from "../services/ai/agents";
+import { createSnapshot } from "../services/snapshot.service";
 
 const router: Router = Router();
 
@@ -172,31 +173,14 @@ router.post("/:id/snapshots", async (req: AuthRequest, res, next) => {
       return;
     }
 
-    // Limit to 30 snapshots per chapter
-    const existing = await db.query.chapterSnapshots.findMany({
-      where: eq(schema.chapterSnapshots.chapterId, id),
-      orderBy: [desc(schema.chapterSnapshots.createdAt)],
-    });
-    if (existing.length >= 30) {
-      const toDelete = existing.slice(29);
-      for (const snap of toDelete) {
-        await db
-          .delete(schema.chapterSnapshots)
-          .where(eq(schema.chapterSnapshots.id, snap.id));
-      }
-    }
-
-    const [snapshot] = await db
-      .insert(schema.chapterSnapshots)
-      .values({
-        chapterId: id,
-        novelId: chapter.novelId,
-        content: chapter.content,
-        title: chapter.title,
-        wordCount: chapter.wordCount ?? 0,
-        label: label ?? "手动快照",
-      })
-      .returning();
+    const snapshot = await createSnapshot(
+      id,
+      chapter.novelId,
+      chapter.content,
+      chapter.title,
+      chapter.wordCount ?? 0,
+      label ?? "手动快照",
+    );
 
     res.status(201).json(snapshot);
   } catch (error) {
@@ -244,14 +228,14 @@ router.post(
         where: eq(schema.chapters.id, id),
       });
       if (currentChapter?.content) {
-        await db.insert(schema.chapterSnapshots).values({
-          chapterId: id,
-          novelId: currentChapter.novelId,
-          content: currentChapter.content,
-          title: currentChapter.title,
-          wordCount: currentChapter.wordCount ?? 0,
-          label: "还原前自动保存",
-        });
+        await createSnapshot(
+          id,
+          currentChapter.novelId,
+          currentChapter.content,
+          currentChapter.title,
+          currentChapter.wordCount ?? 0,
+          "还原前自动保存",
+        );
       }
 
       // Restore snapshot content
