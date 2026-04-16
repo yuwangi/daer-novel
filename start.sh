@@ -36,6 +36,37 @@ find_available_ports() {
     return 1
 }
 
+# 检查 Docker 容器是否正在运行
+is_container_running() {
+    local container_name=$1
+    if docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
+        return 0  # 容器正在运行
+    else
+        return 1  # 容器未运行
+    fi
+}
+
+# 检查 Docker 容器是否存在（包括停止的）
+is_container_exists() {
+    local container_name=$1
+    if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
+        return 0  # 容器存在
+    else
+        return 1  # 容器不存在
+    fi
+}
+
+# 检查端口是否被 Docker 容器占用
+is_port_used_by_docker() {
+    local port=$1
+    # 使用 docker ps 检查端口映射
+    if docker ps --format '{{.Ports}}' | grep -q ":${port}->"; then
+        return 0  # 端口被 Docker 容器占用
+    else
+        return 1  # 端口未被 Docker 容器占用
+    fi
+}
+
 # 检查 Docker
 if ! command -v docker &> /dev/null; then
     echo "❌ 错误: 未安装 Docker"
@@ -218,11 +249,172 @@ pnpm install
 # 启动 Docker 服务
 echo ""
 echo "🐳 启动 Docker 服务..."
-docker-compose up -d --force-recreate postgres redis
 
-# 等待数据库就绪
-echo "⏳ 等待数据库启动..."
-sleep 5
+# Docker 容器名称和端口配置
+POSTGRES_CONTAINER="daer-novel-postgres"
+REDIS_CONTAINER="daer-novel-redis"
+POSTGRES_PORT=5789
+REDIS_PORT=6379
+
+# 检查 Docker 容器和端口状态
+echo "🔍 检查 Docker 容器状态..."
+
+# 标记是否有 Docker 端口冲突
+DOCKER_PORT_CONFLICT=false
+DOCKER_CONFLICT_MESSAGE=""
+
+# 检查 Postgres 容器和端口
+if is_container_running $POSTGRES_CONTAINER; then
+    echo "✅ Postgres 容器已在运行 ($POSTGRES_CONTAINER)"
+else
+    # 检查端口是否被占用（不是我们的容器）
+    if ! is_port_available $POSTGRES_PORT; then
+        if is_port_used_by_docker $POSTGRES_PORT; then
+            DOCKER_PORT_CONFLICT=true
+            DOCKER_CONFLICT_MESSAGE="$DOCKER_CONFLICT_MESSAGE⚠️  Postgres 端口 $POSTGRES_PORT 被其他 Docker 容器占用\n"
+        else
+            DOCKER_PORT_CONFLICT=true
+            DOCKER_CONFLICT_MESSAGE="$DOCKER_CONFLICT_MESSAGE⚠️  Postgres 端口 $POSTGRES_PORT 被非 Docker 进程占用\n"
+        fi
+    fi
+fi
+
+# 检查 Redis 容器和端口
+if is_container_running $REDIS_CONTAINER; then
+    echo "✅ Redis 容器已在运行 ($REDIS_CONTAINER)"
+else
+    # 检查端口是否被占用（不是我们的容器）
+    if ! is_port_available $REDIS_PORT; then
+        if is_port_used_by_docker $REDIS_PORT; then
+            DOCKER_PORT_CONFLICT=true
+            DOCKER_CONFLICT_MESSAGE="$DOCKER_CONFLICT_MESSAGE⚠️  Redis 端口 $REDIS_PORT 被其他 Docker 容器占用\n"
+        else
+            DOCKER_PORT_CONFLICT=true
+            DOCKER_CONFLICT_MESSAGE="$DOCKER_CONFLICT_MESSAGE⚠️  Redis 端口 $REDIS_PORT 被非 Docker 进程占用\n"
+        fi
+    fi
+fi
+
+# 如果有 Docker 端口冲突，询问用户如何处理
+if [ "$DOCKER_PORT_CONFLICT" = true ]; then
+    echo ""
+    echo "⚠️  检测到 Docker 端口冲突！"
+    echo "================================"
+    echo -e "$DOCKER_CONFLICT_MESSAGE"
+    echo "================================"
+    echo "请选择处理方式:"
+    echo "1) 尝试启动现有容器 (如果存在但未运行)"
+    echo "2) 终止占用端口的容器/进程并重新启动 (可能影响其他项目)"
+    echo "3) 跳过 Docker 启动 (假设数据库和 Redis 已在其他地方运行)"
+    echo "4) 取消启动"
+    echo "================================"
+    read -p "请输入选项 (1/2/3/4): " DOCKER_CHOICE
+    
+    case $DOCKER_CHOICE in
+        1)
+            # 尝试启动现有容器
+            echo ""
+            echo "🔍 检查是否存在已停止的容器..."
+            
+            # 启动 Postgres 容器（如果存在但未运行）
+            if is_container_exists $POSTGRES_CONTAINER && ! is_container_running $POSTGRES_CONTAINER; then
+                echo "🔨 启动 Postgres 容器 ($POSTGRES_CONTAINER)..."
+                docker start $POSTGRES_CONTAINER
+            elif ! is_container_exists $POSTGRES_CONTAINER; then
+                echo "⚠️  Postgres 容器不存在，需要创建新容器"
+                if ! is_port_available $POSTGRES_PORT; then
+                    echo "❌ Postgres 端口 $POSTGRES_PORT 仍被占用，无法创建新容器"
+                    echo "💡 请选择选项 2 终止占用进程，或选择选项 3 跳过 Docker 启动"
+                    exit 1
+                fi
+            fi
+            
+            # 启动 Redis 容器（如果存在但未运行）
+            if is_container_exists $REDIS_CONTAINER && ! is_container_running $REDIS_CONTAINER; then
+                echo "🔨 启动 Redis 容器 ($REDIS_CONTAINER)..."
+                docker start $REDIS_CONTAINER
+            elif ! is_container_exists $REDIS_CONTAINER; then
+                echo "⚠️  Redis 容器不存在，需要创建新容器"
+                if ! is_port_available $REDIS_PORT; then
+                    echo "❌ Redis 端口 $REDIS_PORT 仍被占用，无法创建新容器"
+                    echo "💡 请选择选项 2 终止占用进程，或选择选项 3 跳过 Docker 启动"
+                    exit 1
+                fi
+            fi
+            
+            # 使用 docker-compose up -d 启动（不会强制重建，只启动需要的）
+            echo ""
+            echo "🔨 启动 Docker 服务 (postgres 和 redis)..."
+            docker-compose up -d postgres redis
+            ;;
+        2)
+            # 终止占用端口的容器/进程并重新启动
+            echo ""
+            echo "🔨 终止占用端口的容器/进程..."
+            
+            # 终止占用 Postgres 端口的进程
+            if ! is_port_available $POSTGRES_PORT; then
+                POSTGRES_PID=$(lsof -ti :$POSTGRES_PORT 2>/dev/null)
+                if [ ! -z "$POSTGRES_PID" ]; then
+                    echo "🔨 终止占用 Postgres 端口 $POSTGRES_PORT 的进程 (PID: $POSTGRES_PID)..."
+                    kill -9 $POSTGRES_PID 2>/dev/null
+                fi
+            fi
+            
+            # 终止占用 Redis 端口的进程
+            if ! is_port_available $REDIS_PORT; then
+                REDIS_PID=$(lsof -ti :$REDIS_PORT 2>/dev/null)
+                if [ ! -z "$REDIS_PID" ]; then
+                    echo "🔨 终止占用 Redis 端口 $REDIS_PORT 的进程 (PID: $REDIS_PID)..."
+                    kill -9 $REDIS_PID 2>/dev/null
+                fi
+            fi
+            
+            # 等待端口释放
+            sleep 2
+            
+            # 使用 docker-compose up -d 启动（不会强制重建，只启动需要的）
+            echo ""
+            echo "🔨 启动 Docker 服务 (postgres 和 redis)..."
+            docker-compose up -d postgres redis
+            ;;
+        3)
+            # 跳过 Docker 启动
+            echo ""
+            echo "⏭️  跳过 Docker 启动"
+            echo "💡 假设 PostgreSQL 和 Redis 已在其他地方运行"
+            echo "💡 请确保数据库连接配置正确"
+            SKIP_DOCKER=true
+            ;;
+        4)
+            # 取消启动
+            echo "❌ 已取消启动"
+            exit 0
+            ;;
+        *)
+            # 默认选项：取消
+            echo "⚠️  无效选项，已取消启动"
+            exit 1
+            ;;
+    esac
+else
+    # 没有端口冲突，正常启动
+    echo "✅ 没有检测到 Docker 端口冲突"
+    echo ""
+    echo "🔨 启动 Docker 服务 (postgres 和 redis)..."
+    # 使用 docker-compose up -d 启动（不会强制重建，只启动需要的）
+    # 如果容器已存在且运行中，不会做任何操作
+    # 如果容器已存在但停止，会启动它
+    # 如果容器不存在，会创建并启动它
+    docker-compose up -d postgres redis
+fi
+
+# 等待数据库就绪（如果没有跳过 Docker）
+if [ "$SKIP_DOCKER" != "true" ]; then
+    echo ""
+    echo "⏳ 等待数据库启动..."
+    sleep 5
+fi
 
 # 执行数据库迁移
 echo ""
