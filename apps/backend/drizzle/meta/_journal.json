@@ -71,6 +71,13 @@
       "when": 1772625679467,
       "tag": "0009_typical_thor_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1775799710167,
+      "tag": "0010_high_rocket_raccoon",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "chapters" ADD COLUMN "content_modified_at" timestamp;

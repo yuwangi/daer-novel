@@ -13,7 +13,7 @@ export interface Novel {
     powerSystem?: string;
     forbiddenRules?: string[];
   };
-  status: 'draft' | 'generating' | 'completed';
+  status: "draft" | "generating" | "completed";
   createdAt: Date;
   updatedAt: Date;
 }
@@ -41,17 +41,25 @@ export interface Chapter {
   detailOutline?: string;
   content?: string;
   wordCount: number;
-  status: 'pending' | 'generating' | 'completed' | 'failed';
+  status: "pending" | "generating" | "completed" | "failed";
   createdAt: Date;
   updatedAt: Date;
+  contentModifiedAt: Date | null;
 }
 
 export interface Task {
   id: string;
   novelId: string;
   chapterId?: string;
-  type: 'outline' | 'title' | 'chapter_planning' | 'chapter_outline' | 'chapter_detail' | 'content' | 'consistency';
-  status: 'queued' | 'running' | 'completed' | 'failed';
+  type:
+    | "outline"
+    | "title"
+    | "chapter_planning"
+    | "chapter_outline"
+    | "chapter_detail"
+    | "content"
+    | "consistency";
+  status: "queued" | "running" | "completed" | "failed";
   progress: number;
   result?: any;
   error?: string;
@@ -62,7 +70,7 @@ export interface Task {
 export interface AIConfig {
   id: string;
   userId: string;
-  provider: 'openai' | 'anthropic' | 'deepseek';
+  provider: "openai" | "anthropic" | "deepseek";
   model: string;
   apiKey: string;
   baseUrl?: string;
