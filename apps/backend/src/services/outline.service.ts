@@ -195,21 +195,71 @@ export class OutlineService extends BaseService {
   }
 
   generateHumanReadableSummary(outline: StructuredOutline): string {
+    const conflictTypeLabels: Record<string, string> = {
+      internal: "内心冲突（抉择、信念动摇、恐惧等）",
+      external: "外部冲突（战斗、追逐、谈判等）",
+      relationship: "关系冲突（信任破裂、合作瓦解、爱恨纠葛等）",
+      mystery: "悬疑冲突（解谜、调查、真相揭露等）",
+    };
+
+    const phaseTypeLabels: Record<string, string> = {
+      exposition: "开篇",
+      rising_action: "上升",
+      climax: "高潮",
+      falling_action: "回落",
+      resolution: "结局",
+    };
+
+    const threadTypeLabels: Record<string, string> = {
+      main: "主线",
+      sub: "支线",
+      character: "角色线",
+      world: "世界观线",
+      thematic: "主题线",
+    };
+
+    const phaseIdToName = new Map<string, string>();
+    const eventIdToTitle = new Map<string, string>();
+    const eventIdToPhaseName = new Map<string, string>();
+
+    outline.phases?.forEach((phase, pIndex) => {
+      const phaseDisplayName = `阶段 ${pIndex + 1}：${phase.phaseName}`;
+      phaseIdToName.set(phase.id, phaseDisplayName);
+
+      phase.events?.forEach((event, eIndex) => {
+        const eventDisplayName = `事件 ${eIndex + 1}「${event.title}」`;
+        eventIdToTitle.set(event.id, eventDisplayName);
+        eventIdToPhaseName.set(event.id, phaseDisplayName);
+      });
+    });
+
+    const getPhaseName = (phaseId: string): string => {
+      return phaseIdToName.get(phaseId) || phaseId;
+    };
+
+    const getPhaseNames = (phaseIds: string[]): string => {
+      return phaseIds.map((id) => getPhaseName(id)).join("、");
+    };
+
+    const getEventName = (eventId: string): string => {
+      return eventIdToTitle.get(eventId) || eventId;
+    };
+
     let summary = `# 《${outline.novelTitle}》大纲概览\n\n`;
 
-    summary += `## 核心信息\n`;
+    summary += `## 一、核心信息\n`;
     summary += `- **一句话梗概**：${outline.corePremise || "未设定"}\n`;
     summary += `- **核心主题**：${outline.centralTheme || "未设定"}\n`;
     summary += `- **叙事弧线**：${outline.narrativeArc || "未设定"}\n`;
-    summary += `- **预计字数**：${outline.estimatedTotalWords?.toLocaleString() || "未设定"} 字\n`;
-    summary += `- **预计章节**：${outline.chapterCountEstimate || "未设定"} 章\n\n`;
+    summary += `- **预计总字数**：${outline.estimatedTotalWords?.toLocaleString() || "未设定"} 字\n`;
+    summary += `- **预计章节数**：${outline.chapterCountEstimate || "未设定"} 章\n\n`;
 
     if (outline.mainConflict) {
-      summary += `## 核心冲突\n`;
-      summary += `- **类型**：${outline.mainConflict.type || "未设定"}\n`;
-      summary += `- **描述**：${outline.mainConflict.description || "未设定"}\n`;
+      summary += `## 二、核心冲突\n`;
+      summary += `- **冲突类型**：${outline.mainConflict.type || "未设定"}\n`;
+      summary += `- **冲突描述**：${outline.mainConflict.description || "未设定"}\n`;
       if (outline.mainConflict.escalatingSteps?.length) {
-        summary += `- **升级步骤**：\n`;
+        summary += `- **冲突升级路径**：\n`;
         outline.mainConflict.escalatingSteps.forEach((step, i) => {
           summary += `  ${i + 1}. ${step}\n`;
         });
@@ -217,97 +267,162 @@ export class OutlineService extends BaseService {
       summary += `\n`;
     }
 
-    summary += `## 阶段划分 (共 ${outline.phases?.length || 0} 个阶段)\n\n`;
+    summary += `## 三、阶段划分 (共 ${outline.phases?.length || 0} 个阶段)\n\n`;
 
-    outline.phases?.forEach((phase, index) => {
-      const phaseTypeLabels: Record<string, string> = {
-        exposition: "开篇",
-        rising_action: "上升",
-        climax: "高潮",
-        falling_action: "回落",
-        resolution: "结局",
-      };
-
-      summary += `### 阶段 ${index + 1}：${phase.phaseName} (${phaseTypeLabels[phase.phaseType] || phase.phaseType})\n`;
+    outline.phases?.forEach((phase, pIndex) => {
+      const phaseIndex = pIndex + 1;
+      summary += `### 阶段 ${phaseIndex}：${phase.phaseName}（${phaseTypeLabels[phase.phaseType] || phase.phaseType}）\n`;
       summary += `- **字数范围**：${phase.startWordEstimate?.toLocaleString() || 0} - ${phase.endWordEstimate?.toLocaleString() || 0} 字\n`;
       summary += `- **核心目标**：${phase.coreGoal || "未设定"}\n`;
       summary += `- **主要冲突**：${phase.mainConflict || "未设定"}\n`;
-      summary += `- **赌注**：${phase.stakes || "未设定"}\n`;
+      summary += `- **失败赌注**：${phase.stakes || "未设定"}\n`;
       summary += `- **事件数量**：${phase.events?.length || 0} 个\n`;
 
       if (phase.events?.length) {
-        summary += `\n#### 事件列表：\n`;
+        summary += `\n#### 事件详情：\n`;
         phase.events.forEach((event, eIndex) => {
-          summary += `\n**事件 ${eIndex + 1}：${event.title}**\n`;
-          summary += `- ID: ${event.id}\n`;
-          summary += `- 涉及角色：${event.characters?.join(", ") || "未设定"}\n`;
-          summary += `- 冲突类型：${event.conflictType || "未设定"}\n`;
-          summary += `- 转折点：${event.turningPoint || "未设定"}\n`;
-          summary += `- 情感变化：${event.emotionalShift || "未设定"}\n`;
-          summary += `- 结果：${event.outcome || "未设定"}\n`;
-          summary += `- 预计字数：${event.wordEstimate || 3000} 字\n`;
+          const eventIndex = eIndex + 1;
+          summary += `\n##### 事件 ${eventIndex}：${event.title}\n`;
+          summary += `- **涉及角色**：${event.characters?.join("、") || "未设定"}\n`;
+          summary += `- **冲突类型**：${conflictTypeLabels[event.conflictType] || event.conflictType || "未设定"}\n`;
+          summary += `- **关键转折点**：${event.turningPoint || "未设定"}\n`;
+          summary += `- **情感变化**：${event.emotionalShift || "未设定"}\n`;
+          summary += `- **事件结果**：${event.outcome || "未设定"}\n`;
+          summary += `- **预计字数**：${event.wordEstimate || 3000} 字\n`;
 
           if (event.nextEventHints?.length) {
-            summary += `- 伏笔：${event.nextEventHints.join("；")}\n`;
+            summary += `- **埋下伏笔**：${event.nextEventHints.join("；")}\n`;
           }
           if (event.suspenseHook) {
-            summary += `- 悬念钩子：${event.suspenseHook}\n`;
+            summary += `- **悬念钩子**：${event.suspenseHook}\n`;
           }
           if (event.worldBuildingDetails) {
-            summary += `- 世界观细节：${event.worldBuildingDetails}\n`;
+            summary += `- **世界观展示**：${event.worldBuildingDetails}\n`;
           }
         });
       }
 
       if (phase.characterDevelopments?.length) {
-        summary += `\n#### 角色发展：\n`;
+        summary += `\n#### 本阶段角色发展：\n`;
         phase.characterDevelopments.forEach((dev) => {
           summary += `- ${dev}\n`;
         });
       }
 
       if (phase.worldBuildingAdvancements?.length) {
-        summary += `\n#### 世界观推进：\n`;
+        summary += `\n#### 本阶段世界观推进：\n`;
         phase.worldBuildingAdvancements.forEach((wb) => {
           summary += `- ${wb}\n`;
         });
       }
 
+      if (phase.thematicElements?.length) {
+        summary += `\n#### 本阶段主题呼应：\n`;
+        phase.thematicElements.forEach((theme) => {
+          summary += `- ${theme}\n`;
+        });
+      }
+
       if (phase.interPhaseHook) {
-        summary += `\n#### 阶段间钩子：\n`;
+        summary += `\n#### 进入下一阶段的钩子：\n`;
         summary += `${phase.interPhaseHook}\n`;
       }
 
-      summary += `\n---\n\n`;
+      if (pIndex < (outline.phases?.length || 0) - 1) {
+        summary += `\n---\n\n`;
+      }
     });
 
     if (outline.plotThreads?.length) {
-      summary += `## 情节线 (共 ${outline.plotThreads.length} 条)\n\n`;
+      summary += `\n\n## 四、情节线追踪 (共 ${outline.plotThreads.length} 条)\n\n`;
       outline.plotThreads.forEach((thread) => {
-        const typeLabels: Record<string, string> = {
-          main: "主线",
-          sub: "支线",
-          character: "角色线",
-          world: "世界观线",
-          thematic: "主题线",
-        };
-        summary += `### ${typeLabels[thread.threadType] || thread.threadType}：${thread.threadName}\n`;
-        summary += `- **描述**：${thread.description || "未设定"}\n`;
-        summary += `- **涉及阶段**：${thread.phaseIds?.join(", ") || "未设定"}\n`;
-        summary += `- **涉及事件数**：${thread.eventIds?.length || 0}\n`;
+        const threadType = threadTypeLabels[thread.threadType] || thread.threadType;
+        summary += `### ${threadType}：${thread.threadName}\n`;
+        summary += `- **情节线描述**：${thread.description || "未设定"}\n`;
+
+        if (thread.phaseIds?.length) {
+          summary += `- **涉及阶段**：${getPhaseNames(thread.phaseIds)}\n`;
+        }
+
+        summary += `- **关联事件数**：${thread.eventIds?.length || 0} 个\n`;
+
+        if (thread.eventIds?.length) {
+          const eventNames = thread.eventIds.map((id) => getEventName(id));
+          if (eventNames.length <= 5) {
+            summary += `- **关联事件**：${eventNames.join("、")}\n`;
+          } else {
+            summary += `- **关联事件**：${eventNames.slice(0, 3).join("、")} 等共 ${eventNames.length} 个\n`;
+          }
+        }
+
         summary += `- **收束方式**：${thread.resolution || "未设定"}\n`;
         summary += `- **主题意义**：${thread.thematicSignificance || "未设定"}\n\n`;
       });
     }
 
+    if (outline.characterArcs?.length) {
+      summary += `## 五、角色弧线\n\n`;
+      outline.characterArcs.forEach((arc, index) => {
+        summary += `### ${arc.characterName} 的弧线\n`;
+        summary += `- **弧线类型**：${arc.arcType || "未设定"}\n`;
+
+        if (arc.keyEvents?.length) {
+          summary += `- **关键发展事件**：\n`;
+          arc.keyEvents.forEach((event, i) => {
+            summary += `  ${i + 1}. ${event}\n`;
+          });
+        }
+
+        summary += `- **弧线结局**：${arc.resolution || "未设定"}\n\n`;
+      });
+    }
+
+    if (outline.worldBuildingReveals?.length) {
+      summary += `## 六、世界观揭示点\n\n`;
+      outline.worldBuildingReveals.forEach((reveal, index) => {
+        summary += `### 揭示 ${index + 1}\n`;
+        summary += `- **揭示内容**：${reveal.reveal || "未设定"}\n`;
+        summary += `- **出现位置**：${getPhaseName(reveal.phaseId)}\n`;
+
+        if (reveal.eventId) {
+          summary += `- **关联事件**：${getEventName(reveal.eventId)}\n`;
+        }
+
+        summary += `- **剧情意义**：${reveal.significance || "未设定"}\n\n`;
+      });
+    }
+
     if (outline.cliffhangerPoints?.length) {
-      summary += `## 关键悬念点 (共 ${outline.cliffhangerPoints.length} 个)\n\n`;
+      summary += `## 七、关键悬念/钩子点 (共 ${outline.cliffhangerPoints.length} 个)\n\n`;
       outline.cliffhangerPoints.forEach((point, index) => {
         summary += `### 悬念 ${index + 1}\n`;
-        summary += `- **位置**：阶段 ${point.phaseId}，事件 ${point.eventId}\n`;
-        summary += `- **描述**：${point.description || "未设定"}\n`;
-        summary += `- **目的**：${point.purpose || "未设定"}\n\n`;
+        summary += `- **悬念描述**：${point.description || "未设定"}\n`;
+        summary += `- **出现位置**：${getPhaseName(point.phaseId)}\n`;
+
+        if (point.eventId) {
+          summary += `- **关联事件**：${getEventName(point.eventId)}\n`;
+        }
+
+        summary += `- **悬念目的**：${point.purpose || "未设定"}\n\n`;
       });
+    }
+
+    if (outline.pacingGuidelines) {
+      summary += `## 八、节奏指南\n\n`;
+      summary += `- **整体节奏建议**：${outline.pacingGuidelines.overall || "未设定"}\n\n`;
+
+      if (outline.pacingGuidelines.phaseSpecific?.length) {
+        summary += `### 各阶段节奏调整：\n`;
+        outline.pacingGuidelines.phaseSpecific.forEach((phasePacing) => {
+          const pacingLabels: Record<string, string> = {
+            slow: "舒缓",
+            medium: "适中",
+            fast: "紧凑",
+          };
+          summary += `- **${getPhaseName(phasePacing.phaseId)}**：节奏 ${pacingLabels[phasePacing.pacing] || phasePacing.pacing} — ${phasePacing.recommendation}\n`;
+        });
+      }
+      summary += `\n`;
     }
 
     return summary;
