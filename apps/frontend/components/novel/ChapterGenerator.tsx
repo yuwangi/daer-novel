@@ -116,6 +116,10 @@ export default function ChapterGenerator({
   >(null);
   const [isVolumeDraftModalOpen, setIsVolumeDraftModalOpen] = useState(false);
   const [isSavingVolumeDraft, setIsSavingVolumeDraft] = useState(false);
+  // Volume Draft Confirmation State
+  const [volumeConfirmText, setVolumeConfirmText] = useState("");
+  const [showVolumeConfirmWarning, setShowVolumeConfirmWarning] =
+    useState(false);
 
   // Volume Inline-Edit State
   const [editingVolumeId, setEditingVolumeId] = useState<string | null>(null);
@@ -356,6 +360,45 @@ export default function ChapterGenerator({
       restoreActiveTasks();
     }
   }, [socket, restoreActiveTasks]);
+
+  // Calculate existing content statistics for volume planning warning
+  const getExistingContentStats = useCallback(() => {
+    let totalVolumes = volumes.length;
+    let totalChapters = 0;
+    let completedChapters = 0;
+    let chaptersWithContent = 0;
+    let totalWords = 0;
+
+    volumes.forEach((volume) => {
+      volume.chapters.forEach((chapter) => {
+        totalChapters++;
+        if (chapter.status === "completed") {
+          completedChapters++;
+        }
+        if (chapter.content && chapter.content.trim().length > 0) {
+          chaptersWithContent++;
+          totalWords += chapter.wordCount || 0;
+        }
+      });
+    });
+
+    return {
+      totalVolumes,
+      totalChapters,
+      completedChapters,
+      chaptersWithContent,
+      totalWords,
+      hasDangerousContent: completedChapters > 0 || chaptersWithContent > 0,
+    };
+  }, [volumes]);
+
+  // Reset confirmation state when modal opens
+  useEffect(() => {
+    if (isVolumeDraftModalOpen) {
+      setVolumeConfirmText("");
+      setShowVolumeConfirmWarning(false);
+    }
+  }, [isVolumeDraftModalOpen]);
 
   // Structure Generation Handlers
   // Volume Structure Generation
@@ -1047,104 +1090,237 @@ export default function ChapterGenerator({
         title="预览并调整生成的分卷"
         size="lg"
       >
-        <div className="space-y-4">
-          <p className="text-sm text-amber-600 font-medium">
-            ⚠️ 注意：确认保存后，原有的所有分卷及章节都将被删除替换！
-          </p>
-          <div className="max-h-[50vh] overflow-y-auto space-y-3 p-1">
-            {draftVolumes?.map((draft, idx) => (
-              <div
-                key={idx}
-                className="flex items-start gap-2 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700"
-              >
-                <div className="flex-shrink-0 text-xs font-mono text-gray-400 mt-2">
-                  卷 {idx + 1}
+        {(() => {
+          const stats = getExistingContentStats();
+          const confirmTextRequired = "确认删除所有现有内容";
+          const isConfirmValid = volumeConfirmText === confirmTextRequired;
+
+          return (
+            <div className="space-y-4">
+              {/* Danger Warning Section */}
+              {stats.hasDangerousContent ? (
+                <div className="border-2 border-red-400 bg-red-50 dark:bg-red-950/30 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0">
+                      <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center">
+                        <span className="text-red-600 dark:text-red-400 text-xl font-bold">
+                          !
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex-grow space-y-2">
+                      <h4 className="text-red-700 dark:text-red-400 font-bold text-lg">
+                        ⚠️ 危险操作警告
+                      </h4>
+                      <p className="text-red-600 dark:text-red-400 text-sm">
+                        此操作将永久删除以下内容，且无法恢复：
+                      </p>
+
+                      {/* Content Statistics */}
+                      <div className="grid grid-cols-2 gap-2 mt-3">
+                        <div className="bg-white/50 dark:bg-black/20 rounded p-2">
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            现有分卷数
+                          </div>
+                          <div className="text-lg font-bold text-red-600 dark:text-red-400">
+                            {stats.totalVolumes} 卷
+                          </div>
+                        </div>
+                        <div className="bg-white/50 dark:bg-black/20 rounded p-2">
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            现有章节数
+                          </div>
+                          <div className="text-lg font-bold text-red-600 dark:text-red-400">
+                            {stats.totalChapters} 章
+                          </div>
+                        </div>
+                        <div className="bg-white/50 dark:bg-black/20 rounded p-2">
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            已完成章节
+                          </div>
+                          <div className="text-lg font-bold text-red-600 dark:text-red-400">
+                            {stats.completedChapters} 章
+                          </div>
+                        </div>
+                        <div className="bg-white/50 dark:bg-black/20 rounded p-2">
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            总字数
+                          </div>
+                          <div className="text-lg font-bold text-red-600 dark:text-red-400">
+                            {stats.totalWords.toLocaleString()} 字
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Confirmation Input */}
+                      <div className="mt-4">
+                        <label className="block text-sm font-medium text-red-700 dark:text-red-400 mb-2">
+                          为确认此危险操作，请输入以下文本：
+                          <span className="font-mono bg-red-100 dark:bg-red-900/50 px-2 py-1 rounded ml-2">
+                            {confirmTextRequired}
+                          </span>
+                        </label>
+                        <input
+                          type="text"
+                          value={volumeConfirmText}
+                          onChange={(e) => {
+                            setVolumeConfirmText(e.target.value);
+                            setShowVolumeConfirmWarning(false);
+                          }}
+                          placeholder={`请输入：${confirmTextRequired}`}
+                          className={`w-full px-3 py-2 text-sm rounded-md border ${
+                            isConfirmValid
+                              ? "border-green-400 bg-green-50 dark:bg-green-950/20"
+                              : showVolumeConfirmWarning
+                                ? "border-red-400 bg-red-50 dark:bg-red-950/20"
+                                : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                          } focus:ring-2 focus:ring-primary-500 focus:outline-none`}
+                        />
+                        {showVolumeConfirmWarning && (
+                          <p className="text-red-500 text-sm mt-1">
+                            请先输入确认文本以继续
+                          </p>
+                        )}
+                        {isConfirmValid && (
+                          <p className="text-green-600 dark:text-green-400 text-sm mt-1">
+                            ✓ 确认文本已匹配
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex-grow space-y-2">
-                  <input
-                    value={draft.title}
-                    onChange={(e) => {
-                      const newDrafts = [...(draftVolumes || [])];
-                      newDrafts[idx].title = e.target.value;
-                      setDraftVolumes(newDrafts);
-                    }}
-                    className="w-full font-bold bg-transparent border-none focus:ring-0 p-0 text-gray-900 dark:text-white"
-                  />
-                  <textarea
-                    value={draft.summary}
-                    onChange={(e) => {
-                      const newDrafts = [...(draftVolumes || [])];
-                      newDrafts[idx].summary = e.target.value;
-                      setDraftVolumes(newDrafts);
-                    }}
-                    className="w-full text-sm bg-transparent border-gray-200 rounded focus:ring-1 p-1 text-gray-600 dark:text-gray-400"
-                    rows={2}
-                  />
+              ) : (
+                <div className="border border-amber-300 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-4">
+                  <p className="text-amber-700 dark:text-amber-400 font-medium">
+                    ⚠️ 注意：确认保存后，原有的分卷结构将被新的分卷替换。
+                  </p>
+                  <p className="text-amber-600 dark:text-amber-500 text-sm mt-1">
+                    当前尚未生成任何章节内容，此操作相对安全。
+                  </p>
                 </div>
+              )}
+
+              {/* Draft Volumes List */}
+              <div>
+                <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  新分卷预览（共 {draftVolumes?.length || 0} 卷）
+                </h5>
+                <div className="max-h-[40vh] overflow-y-auto space-y-3 p-1">
+                  {draftVolumes?.map((draft, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-start gap-2 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700"
+                    >
+                      <div className="flex-shrink-0 text-xs font-mono text-gray-400 mt-2">
+                        卷 {idx + 1}
+                      </div>
+                      <div className="flex-grow space-y-2">
+                        <input
+                          value={draft.title}
+                          onChange={(e) => {
+                            const newDrafts = [...(draftVolumes || [])];
+                            newDrafts[idx].title = e.target.value;
+                            setDraftVolumes(newDrafts);
+                          }}
+                          className="w-full font-bold bg-transparent border-none focus:ring-0 p-0 text-gray-900 dark:text-white"
+                        />
+                        <textarea
+                          value={draft.summary}
+                          onChange={(e) => {
+                            const newDrafts = [...(draftVolumes || [])];
+                            newDrafts[idx].summary = e.target.value;
+                            setDraftVolumes(newDrafts);
+                          }}
+                          className="w-full text-sm bg-transparent border-gray-200 dark:border-gray-700 rounded focus:ring-1 p-1 text-gray-600 dark:text-gray-400"
+                          rows={2}
+                        />
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-700"
+                        onClick={() => {
+                          const newDrafts =
+                            draftVolumes?.filter((_, i) => i !== idx) || null;
+                          setDraftVolumes(newDrafts);
+                        }}
+                      >
+                        删除
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-between items-center pt-4 border-t">
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  className="text-red-500 hover:text-red-700"
                   onClick={() => {
-                    const newDrafts =
-                      draftVolumes?.filter((_, i) => i !== idx) || null;
+                    const newDrafts = [
+                      ...(draftVolumes || []),
+                      { title: "新卷名", summary: "分卷摘要描述" },
+                    ];
                     setDraftVolumes(newDrafts);
                   }}
                 >
-                  删除
+                  <Plus className="w-4 h-4 mr-1" />
+                  添加分卷
                 </Button>
+                <div className="space-x-3">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setIsVolumeDraftModalOpen(false)}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    variant={
+                      stats.hasDangerousContent ? "destructive" : "default"
+                    }
+                    onClick={async () => {
+                      if (!draftVolumes) return;
+
+                      // Check confirmation for dangerous operations
+                      if (stats.hasDangerousContent && !isConfirmValid) {
+                        setShowVolumeConfirmWarning(true);
+                        return;
+                      }
+
+                      setIsSavingVolumeDraft(true);
+                      try {
+                        await tasksAPI.saveBatchVolumes(
+                          novelId,
+                          draftVolumes,
+                          stats.hasDangerousContent,
+                        );
+                        toast.success("分卷已成功存入书库");
+                        setIsVolumeDraftModalOpen(false);
+                        onUpdate();
+                      } catch (e) {
+                        toast.error("保存失败");
+                      } finally {
+                        setIsSavingVolumeDraft(false);
+                      }
+                    }}
+                    disabled={isSavingVolumeDraft || !draftVolumes?.length}
+                  >
+                    {isSavingVolumeDraft ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                    )}
+                    {stats.hasDangerousContent
+                      ? "确认删除并替换"
+                      : `确认替换并保存 (${draftVolumes?.length || 0}卷)`}
+                  </Button>
+                </div>
               </div>
-            ))}
-          </div>
-          <div className="flex justify-between items-center pt-4 border-t">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const newDrafts = [
-                  ...(draftVolumes || []),
-                  { title: "新卷名", summary: "分卷摘要描述" },
-                ];
-                setDraftVolumes(newDrafts);
-              }}
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              添加分卷
-            </Button>
-            <div className="space-x-3">
-              <Button
-                variant="ghost"
-                onClick={() => setIsVolumeDraftModalOpen(false)}
-              >
-                以后再说
-              </Button>
-              <Button
-                onClick={async () => {
-                  if (!draftVolumes) return;
-                  setIsSavingVolumeDraft(true);
-                  try {
-                    await tasksAPI.saveBatchVolumes(novelId, draftVolumes);
-                    toast.success("分卷已成功存入书库");
-                    setIsVolumeDraftModalOpen(false);
-                    onUpdate();
-                  } catch (e) {
-                    toast.error("保存失败");
-                  } finally {
-                    setIsSavingVolumeDraft(false);
-                  }
-                }}
-                disabled={isSavingVolumeDraft || !draftVolumes?.length}
-              >
-                {isSavingVolumeDraft ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                )}
-                确认替换并保存 ({draftVolumes?.length || 0})
-              </Button>
             </div>
-          </div>
-        </div>
+          );
+        })()}
       </Modal>
 
       {/* Chapter Generation Settings Modal */}

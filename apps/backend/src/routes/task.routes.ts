@@ -246,6 +246,48 @@ router.post("/:novelId/volumes/batch", async (req: AuthRequest, res, next) => {
   try {
     const { novelId } = req.params;
     const { volumes: newVolumes } = req.body;
+    const force = req.query.force === "true";
+
+    // Get existing chapters with content or completed status
+    const existingChapters = await db.query.chapters.findMany({
+      where: eq(schema.chapters.novelId, novelId),
+      columns: {
+        id: true,
+        status: true,
+        content: true,
+        wordCount: true,
+      },
+    });
+
+    // Calculate dangerous content statistics
+    const totalChapters = existingChapters.length;
+    const completedChapters = existingChapters.filter(
+      (c) => c.status === "completed",
+    ).length;
+    const chaptersWithContent = existingChapters.filter(
+      (c) => c.content && c.content.trim().length > 0,
+    ).length;
+    const totalWords = existingChapters.reduce(
+      (sum, c) => sum + (c.wordCount || 0),
+      0,
+    );
+    const hasDangerousContent =
+      completedChapters > 0 || chaptersWithContent > 0;
+
+    // Protection: if there is dangerous content and force is not true, block the operation
+    if (hasDangerousContent && !force) {
+      return res.status(400).json({
+        error: "DANGEROUS_OPERATION",
+        message: "此操作将删除现有内容，需要显式确认",
+        stats: {
+          totalChapters,
+          completedChapters,
+          chaptersWithContent,
+          totalWords,
+        },
+        hint: "请确认后使用 ?force=true 参数继续，或检查前端的确认流程",
+      });
+    }
 
     // Clear existing volumes (chapters and other relations cascade delete)
     await db.delete(schema.volumes).where(eq(schema.volumes.novelId, novelId));

@@ -202,8 +202,10 @@ export const tasksAPI = {
     novelId: string,
     data: { outline: string; additionalRequirements?: string },
   ) => api.post(`/novels/${novelId}/generate/volumes`, data),
-  saveBatchVolumes: (novelId: string, volumes: any[]) =>
-    api.post(`/novels/${novelId}/volumes/batch`, { volumes }),
+  saveBatchVolumes: (novelId: string, volumes: any[], force = false) =>
+    api.post(`/novels/${novelId}/volumes/batch${force ? "?force=true" : ""}`, {
+      volumes,
+    }),
   updateVolume: (
     novelId: string,
     volumeId: string,
