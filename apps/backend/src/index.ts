@@ -30,9 +30,11 @@ import sandboxRoutes from './routes/sandbox.routes';
 const app: Application = express();
 const httpServer = createServer(app);
 // CORS configuration
+const frontendPort = process.env.FRONTEND_PORT || 8001;
+const defaultFrontendUrl = `http://localhost:${frontendPort}`;
 const allowedOrigins = process.env.CORS_ORIGIN 
   ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
-  : ['http://localhost:8001', 'tauri://localhost', 'http://tauri.localhost'];
+  : [defaultFrontendUrl, 'tauri://localhost', 'http://tauri.localhost'];
 
 const corsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
