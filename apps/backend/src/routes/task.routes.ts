@@ -323,4 +323,39 @@ router.get("/tasks/:taskId", async (req: AuthRequest, res, next) => {
   }
 });
 
+// Get active tasks for a novel (queued or running)
+router.get("/:novelId/tasks/active", async (req: AuthRequest, res, next) => {
+  try {
+    const { novelId } = req.params;
+    const activeTasks = await db.query.tasks.findMany({
+      where: eq(schema.tasks.novelId, novelId),
+      orderBy: (tasks, { desc }) => [desc(tasks.createdAt)],
+    });
+
+    const filteredTasks = activeTasks.filter(
+      (task) => task.status === "queued" || task.status === "running",
+    );
+
+    res.json(filteredTasks);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get all tasks for a novel (including completed/failed)
+router.get("/:novelId/tasks", async (req: AuthRequest, res, next) => {
+  try {
+    const { novelId } = req.params;
+    const tasks = await db.query.tasks.findMany({
+      where: eq(schema.tasks.novelId, novelId),
+      orderBy: (tasks, { desc }) => [desc(tasks.createdAt)],
+      limit: 50,
+    });
+
+    res.json(tasks);
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;

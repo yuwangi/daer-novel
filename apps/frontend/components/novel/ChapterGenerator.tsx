@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Loader2,
@@ -24,6 +24,26 @@ import { io, Socket } from "socket.io-client";
 import { tasksAPI } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+// localStorage keys for task persistence
+const getStorageKey = (novelId: string, type: string) =>
+  `daer-novel:${novelId}:task:${type}`;
+
+interface PersistedTaskState {
+  taskId: string;
+  type: string;
+  volumeId?: string;
+  chapterId?: string;
+  status: string;
+  progress?: number;
+  timestamp: number;
+}
+
+const TASK_TYPES = {
+  VOLUME_PLANNING: "volume_planning",
+  CHAPTER_PLANNING: "chapter_planning",
+  CONTENT: "content",
+} as const;
 
 interface Chapter {
   id: string;
@@ -115,6 +135,127 @@ export default function ChapterGenerator({
   const [contentOutline, setContentOutline] = useState("");
   const [contentInstructions, setContentInstructions] = useState("");
 
+  // Persist task state to localStorage
+  const saveTaskToStorage = useCallback(
+    (taskData: Omit<PersistedTaskState, "timestamp">) => {
+      try {
+        const key = getStorageKey(novelId, taskData.type);
+        const state: PersistedTaskState = {
+          ...taskData,
+          timestamp: Date.now(),
+        };
+        localStorage.setItem(key, JSON.stringify(state));
+      } catch (e) {
+        console.warn("Failed to save task state to localStorage:", e);
+      }
+    },
+    [novelId],
+  );
+
+  // Clear task state from localStorage
+  const clearTaskFromStorage = useCallback(
+    (type: string) => {
+      try {
+        const key = getStorageKey(novelId, type);
+        localStorage.removeItem(key);
+      } catch (e) {
+        console.warn("Failed to clear task state from localStorage:", e);
+      }
+    },
+    [novelId],
+  );
+
+  // Get task state from localStorage
+  const getTaskFromStorage = useCallback(
+    (type: string): PersistedTaskState | null => {
+      try {
+        const key = getStorageKey(novelId, type);
+        const stored = localStorage.getItem(key);
+        if (stored) {
+          return JSON.parse(stored);
+        }
+      } catch (e) {
+        console.warn("Failed to get task state from localStorage:", e);
+      }
+      return null;
+    },
+    [novelId],
+  );
+
+  // Restore state from active tasks on mount
+  const restoreActiveTasks = useCallback(async () => {
+    try {
+      const response = await tasksAPI.getActiveTasks(novelId);
+      const activeTasks = response.data as any[];
+
+      if (activeTasks.length === 0) return;
+
+      for (const task of activeTasks) {
+        const stored = getTaskFromStorage(task.type);
+
+        switch (task.type) {
+          case TASK_TYPES.VOLUME_PLANNING:
+            setIsGeneratingStructure(true);
+            setGenerationStatus("正在规划分卷结构...");
+            setGenerationProgress(task.progress || 0);
+            if (socket) {
+              socket.emit("subscribe:task", task.id);
+            }
+            saveTaskToStorage({
+              taskId: task.id,
+              type: task.type,
+              status: task.status,
+              progress: task.progress,
+            });
+            break;
+
+          case TASK_TYPES.CHAPTER_PLANNING:
+            setIsGeneratingStructure(true);
+            if (stored?.volumeId) {
+              activeVolumeRef.current = stored.volumeId;
+              const volume = volumes.find((v) => v.id === stored.volumeId);
+              if (volume) {
+                setActiveVolumeForChapters(volume);
+              }
+            }
+            setGenerationStatus("正在规划章节结构...");
+            setGenerationProgress(task.progress || 0);
+            if (socket) {
+              socket.emit("subscribe:task", task.id);
+            }
+            saveTaskToStorage({
+              taskId: task.id,
+              type: task.type,
+              volumeId: stored?.volumeId,
+              status: task.status,
+              progress: task.progress,
+            });
+            break;
+
+          case TASK_TYPES.CONTENT:
+            if (task.chapterId) {
+              setGeneratingChapterId(task.chapterId);
+              setGenerationStatus("正在生成章节内容...");
+              setGenerationProgress(task.progress || 0);
+              if (socket) {
+                socket.emit("subscribe:task", task.id);
+              }
+              saveTaskToStorage({
+                taskId: task.id,
+                type: task.type,
+                chapterId: task.chapterId,
+                status: task.status,
+                progress: task.progress,
+              });
+            }
+            break;
+        }
+      }
+    } catch (error) {
+      console.error("Failed to restore active tasks:", error);
+    }
+  }, [novelId, socket, volumes, getTaskFromStorage, saveTaskToStorage]);
+
   useEffect(() => {
     // Setup WebSocket
     const socketUrl =
@@ -140,11 +281,25 @@ export default function ChapterGenerator({
     newSocket.on("task:progress", (data) => {
       setGenerationProgress(data.progress || 0);
       setGenerationStatus(data.message || "生成中...");
+
+      // Update localStorage with progress
+      if (data.type) {
+        const stored = getTaskFromStorage(data.type);
+        if (stored) {
+          saveTaskToStorage({
+            ...stored,
+            progress: data.progress || 0,
+          });
+        }
+      }
     });
 
     newSocket.on("task:completed", (data) => {
       setGenerationProgress(100);
       setGenerationStatus("生成完成");
+
+      // Clear persisted state
+      clearTaskFromStorage(data.type);
 
       if (data.type === "chapter_planning" && data.result?.chapters) {
         setDraftChapters(data.result.chapters);
@@ -177,12 +332,30 @@ export default function ChapterGenerator({
       setGenerationProgress(0);
       setIsGeneratingStructure(false); // Reset global structure generation state
       setActiveVolumeForChapters(null);
+
+      // Clear persisted state on failure too
+      if (data.type) {
+        clearTaskFromStorage(data.type);
+      }
     });
 
     return () => {
       newSocket.close();
     };
-  }, [novelId, onUpdate]);
+  }, [
+    novelId,
+    onUpdate,
+    getTaskFromStorage,
+    saveTaskToStorage,
+    clearTaskFromStorage,
+  ]);
+
+  // Restore active tasks when socket is ready
+  useEffect(() => {
+    if (socket) {
+      restoreActiveTasks();
+    }
+  }, [socket, restoreActiveTasks]);
 
   // Structure Generation Handlers
   // Volume Structure Generation
@@ -206,6 +379,12 @@ export default function ChapterGenerator({
       const taskId = res.data?.id;
       if (taskId && socket) {
         socket.emit("subscribe:task", taskId);
+        saveTaskToStorage({
+          taskId,
+          type: TASK_TYPES.VOLUME_PLANNING,
+          status: "queued",
+          progress: 0,
+        });
       }
       toast.success("分卷规划任务已提交");
     } catch (error) {
@@ -321,6 +500,13 @@ export default function ChapterGenerator({
       const taskId = res.data?.id;
       if (taskId && socket) {
         socket.emit("subscribe:task", taskId);
+        saveTaskToStorage({
+          taskId,
+          type: TASK_TYPES.CHAPTER_PLANNING,
+          volumeId,
+          status: "queued",
+          progress: 0,
+        });
       }
       toast.success(`${activeVolumeForChapters.title} 的章节生成任务已提交`);
     } catch (error) {
@@ -356,6 +542,13 @@ export default function ChapterGenerator({
       const taskId = res.data?.id;
       if (taskId && socket) {
         socket.emit("subscribe:task", taskId);
+        saveTaskToStorage({
+          taskId,
+          type: TASK_TYPES.CONTENT,
+          chapterId,
+          status: "queued",
+          progress: 0,
+        });
       }
       toast.success("章节生成任务已提交");
     } catch (error) {

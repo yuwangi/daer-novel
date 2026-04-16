@@ -227,6 +227,9 @@ export const tasksAPI = {
   generateChapterContent: (novelId: string, chapterId: string, data?: any) =>
     api.post(`/novels/${novelId}/chapters/${chapterId}/generate`, data),
   getTaskStatus: (taskId: string) => api.get(`/tasks/${taskId}`),
+  getActiveTasks: (novelId: string) =>
+    api.get(`/novels/${novelId}/tasks/active`),
+  getAllTasks: (novelId: string) => api.get(`/novels/${novelId}/tasks`),
   updateChapter: (
     chapterId: string,
     data: { title?: string; content?: string; outline?: string },
