@@ -95,6 +95,9 @@ fi
 FRONTEND_PORT=${FRONTEND_PORT:-8001}
 BACKEND_PORT=${BACKEND_PORT:-8002}
 
+# 设置 Next.js 使用的 PORT 环境变量
+export PORT=$FRONTEND_PORT
+
 # 检查端口占用
 echo ""
 echo "🔍 检查端口占用..."
@@ -170,6 +173,7 @@ if [ "$PORT_CONFLICT" = true ]; then
             # 设置环境变量，这些变量将在启动时被使用
             export FRONTEND_PORT=$NEW_FE_PORT
             export BACKEND_PORT=$NEW_BE_PORT
+            export PORT=$NEW_FE_PORT
             export NEXT_PUBLIC_API_URL="http://localhost:$NEW_BE_PORT"
             export CORS_ORIGIN="http://localhost:$NEW_FE_PORT"
             export AUTH_BASE_URL="http://localhost:$NEW_BE_PORT/api/auth"
@@ -177,6 +181,7 @@ if [ "$PORT_CONFLICT" = true ]; then
             echo "✅ 环境变量已配置:"
             echo "   FRONTEND_PORT=$FRONTEND_PORT"
             echo "   BACKEND_PORT=$BACKEND_PORT"
+            echo "   PORT=$PORT (Next.js 使用此端口)"
             echo "   NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL"
             echo "   CORS_ORIGIN=$CORS_ORIGIN"
             echo "   AUTH_BASE_URL=$AUTH_BASE_URL"
