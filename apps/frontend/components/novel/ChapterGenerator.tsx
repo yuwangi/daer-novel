@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Loader2,
@@ -392,6 +392,17 @@ export default function ChapterGenerator({
     };
   }, [volumes]);
 
+  // Check if there is an active volume planning task
+  const hasActiveVolumePlanningTask = useMemo(() => {
+    const storedTask = getTaskFromStorage(TASK_TYPES.VOLUME_PLANNING);
+    if (storedTask) {
+      const isActive =
+        storedTask.status === "queued" || storedTask.status === "running";
+      return isActive;
+    }
+    return false;
+  }, [getTaskFromStorage]);
+
   // Reset confirmation state when modal opens
   useEffect(() => {
     if (isVolumeDraftModalOpen) {
@@ -726,28 +737,48 @@ export default function ChapterGenerator({
                       placeholder="分卷剧情摘要"
                     />
                     <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        className="h-7"
-                        onClick={() => handleSaveVolumeEdit(volume)}
-                        disabled={isSavingVolumeEdit}
-                      >
-                        {isSavingVolumeEdit ? (
-                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        ) : (
-                          <Save className="w-3 h-3 mr-1" />
-                        )}
-                        保存
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7"
-                        onClick={handleCancelEditVolume}
-                      >
-                        <X className="w-3 h-3 mr-1" />
-                        取消
-                      </Button>
+                      {hasActiveVolumePlanningTask ? (
+                        <>
+                          <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-950/30 px-2 py-1 rounded">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            分卷规划中，无法保存
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7"
+                            onClick={handleCancelEditVolume}
+                          >
+                            <X className="w-3 h-3 mr-1" />
+                            取消
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            size="sm"
+                            className="h-7"
+                            onClick={() => handleSaveVolumeEdit(volume)}
+                            disabled={isSavingVolumeEdit}
+                          >
+                            {isSavingVolumeEdit ? (
+                              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                            ) : (
+                              <Save className="w-3 h-3 mr-1" />
+                            )}
+                            保存
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7"
+                            onClick={handleCancelEditVolume}
+                          >
+                            <X className="w-3 h-3 mr-1" />
+                            取消
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -777,24 +808,33 @@ export default function ChapterGenerator({
                   </span>
                   {editingVolumeId !== volume.id && (
                     <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-gray-500 hover:text-primary-600"
-                        onClick={() => handleEditVolume(volume)}
-                        title="编辑分卷"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-gray-500 hover:text-red-600"
-                        onClick={() => handleDeleteVolume(volume)}
-                        title="删除分卷"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                      {hasActiveVolumePlanningTask ? (
+                        <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-950/30 px-2 py-1 rounded">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          规划中
+                        </div>
+                      ) : (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-gray-500 hover:text-primary-600"
+                            onClick={() => handleEditVolume(volume)}
+                            title="编辑分卷"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-gray-500 hover:text-red-600"
+                            onClick={() => handleDeleteVolume(volume)}
+                            title="删除分卷"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
