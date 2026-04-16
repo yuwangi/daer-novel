@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo } from "react";
 import {
   ReactFlow,
   MiniMap,
@@ -8,9 +8,9 @@ import {
   useEdgesState,
   Edge,
   Node,
-  MarkerType
-} from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
+  MarkerType,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 
 interface Character {
   id: string;
@@ -22,7 +22,11 @@ interface Character {
   relationships?: { characterId: string; relation: string }[];
 }
 
-export default function RelationshipGraph({ characters }: { characters: Character[] }) {
+export default function RelationshipGraph({
+  characters,
+}: {
+  characters: Character[];
+}) {
   const initialNodes: Node[] = useMemo(() => {
     if (!characters || characters.length === 0) return [];
     const radius = Math.max(200, characters.length * 30);
@@ -33,17 +37,17 @@ export default function RelationshipGraph({ characters }: { characters: Characte
         id: c.id,
         data: { label: c.name },
         position: {
-           x: center.x + radius * Math.cos(angle),
-           y: center.y + radius * Math.sin(angle)
+          x: center.x + radius * Math.cos(angle),
+          y: center.y + radius * Math.sin(angle),
         },
         style: {
-          background: c.role === '主角' ? '#f3e8ff' : '#fff',
-          border: '1px solid #d8b4fe',
-          borderRadius: '8px',
-          padding: '10px 20px',
-          fontWeight: 'bold',
-          color: '#6b21a8'
-        }
+          background: c.role === "主角" ? "#f3e8ff" : "#fff",
+          border: "1px solid #d8b4fe",
+          borderRadius: "8px",
+          padding: "10px 20px",
+          fontWeight: "bold",
+          color: "#6b21a8",
+        },
       };
     });
   }, [characters]);
@@ -51,25 +55,32 @@ export default function RelationshipGraph({ characters }: { characters: Characte
   const initialEdges: Edge[] = useMemo(() => {
     const edges: Edge[] = [];
     if (!characters) return edges;
-    characters.forEach(c => {
-      c.relationships?.forEach(r => {
-        edges.push({
-          id: `e-${c.id}-${r.characterId}`,
-          source: c.id,
-          target: r.characterId,
-          label: r.relation,
-          type: 'smoothstep',
-          animated: true,
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            color: '#a855f7',
-          },
-          style: { stroke: '#a855f7', strokeWidth: 2 },
-          labelStyle: { fill: '#7e22ce', fontWeight: 600, fontSize: 12 },
-          labelBgStyle: { fill: 'rgba(255, 255, 255, 0.9)' },
-          labelBgPadding: [4, 4],
-          labelBgBorderRadius: 4,
-        });
+
+    // Create a set of valid character IDs to filter out dangling references
+    const validCharacterIds = new Set(characters.map((c) => c.id));
+
+    characters.forEach((c) => {
+      c.relationships?.forEach((r) => {
+        // Only create edges for relationships where the target character exists
+        if (validCharacterIds.has(r.characterId)) {
+          edges.push({
+            id: `e-${c.id}-${r.characterId}`,
+            source: c.id,
+            target: r.characterId,
+            label: r.relation,
+            type: "smoothstep",
+            animated: true,
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              color: "#a855f7",
+            },
+            style: { stroke: "#a855f7", strokeWidth: 2 },
+            labelStyle: { fill: "#7e22ce", fontWeight: 600, fontSize: 12 },
+            labelBgStyle: { fill: "rgba(255, 255, 255, 0.9)" },
+            labelBgPadding: [4, 4],
+            labelBgBorderRadius: 4,
+          });
+        }
       });
     });
     return edges;
@@ -92,7 +103,10 @@ export default function RelationshipGraph({ characters }: { characters: Characte
   }
 
   return (
-    <div style={{ width: '100%', height: '600px' }} className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-900">
+    <div
+      style={{ width: "100%", height: "600px" }}
+      className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-900"
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -103,9 +117,13 @@ export default function RelationshipGraph({ characters }: { characters: Characte
         colorMode="system"
       >
         <Controls />
-        <MiniMap zoomable pannable nodeColor={(n: any) => {
-          return n.style?.background === '#f3e8ff' ? '#d8b4fe' : '#e5e7eb';
-        }} />
+        <MiniMap
+          zoomable
+          pannable
+          nodeColor={(n: any) => {
+            return n.style?.background === "#f3e8ff" ? "#d8b4fe" : "#e5e7eb";
+          }}
+        />
         <Background gap={12} size={1} />
       </ReactFlow>
     </div>

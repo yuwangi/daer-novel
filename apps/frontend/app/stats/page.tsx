@@ -77,7 +77,7 @@ export default function StatsPage() {
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState("2000");
 
-  // Load data function
+  // Load data function - Optimized: uses single API call instead of N+1 requests
   const loadData = useCallback(async (showToast = false) => {
     if (showToast) {
       setIsRefreshing(true);
@@ -86,14 +86,9 @@ export default function StatsPage() {
     }
 
     try {
-      const res = await novelsAPI.list();
-      // Also fetch full novel for each to get volumes/chapters
-      const detailedNovels = await Promise.all(
-        (res.data || []).map((n: any) =>
-          novelsAPI.get(n.id).then((r) => r.data),
-        ),
-      );
-      setNovels(detailedNovels);
+      // Use the optimized endpoint that returns all novels with volumes/chapters in one request
+      const res = await novelsAPI.listWithDetails();
+      setNovels(res.data || []);
 
       if (showToast) {
         toast.success("数据已刷新");
