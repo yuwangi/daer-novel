@@ -308,21 +308,33 @@ function NovelDetail() {
   const loadOutlineVersions = async () => {
     try {
       const res = await novelsAPI.getOutlineVersions(novelId);
-      setOutlineVersions(res.data || []);
-      if (res.data && res.data.length > 0 && !currentVersion) {
-        const firstVersion = res.data[0];
-        setCurrentVersion(firstVersion);
-        // If structured, use displayContent for initial load (readable mode)
-        const initialContent = getOutlineDisplayContent(
-          firstVersion,
-          outlineViewMode,
-        );
-        setGeneratedOutline(initialContent);
+      const versions = res.data || [];
+      setOutlineVersions(versions);
+
+      if (versions.length > 0) {
+        const latestVersion = versions[0];
+
+        const needsUpdate =
+          !currentVersion ||
+          currentVersion.id !== latestVersion.id ||
+          currentVersion.version !== latestVersion.version;
+
+        if (needsUpdate) {
+          setCurrentVersion(latestVersion);
+
+          if (latestVersion.isStructured && latestVersion.displayContent) {
+            setOutlineViewMode("readable");
+          }
+
+          const content = getOutlineDisplayContent(
+            latestVersion,
+            latestVersion.isStructured ? "readable" : outlineViewMode,
+          );
+          setGeneratedOutline(content);
+        }
       }
     } catch (error: any) {
       console.error("Failed to load outline versions:", error);
-      // If it's an auth error, the axios interceptor will handle redirect
-      // Otherwise, just set empty array
       if (error.response?.status !== 401) {
         setOutlineVersions([]);
       }
@@ -959,15 +971,52 @@ function NovelDetail() {
                 )}
 
                 <div className="relative">
+                  {/* Generating overlay with friendly message */}
                   {isStreaming && (
-                    <div className="absolute top-2 right-2 flex items-center space-x-2 text-primary-500 bg-white/80 dark:bg-black/80 px-2 py-1 rounded backdrop-blur-sm z-10">
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-500"></span>
-                      </span>
-                      <span className="text-xs font-medium">正在生成...</span>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 dark:bg-gray-900/70 backdrop-blur-sm rounded-xl z-20">
+                      <div className="flex flex-col items-center space-y-4 p-6">
+                        <div className="relative">
+                          <Loader2 className="w-12 h-12 text-primary-500 animate-spin" />
+                          <span className="absolute -bottom-1 -right-1 flex h-4 w-4">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500"></span>
+                          </span>
+                        </div>
+                        <div className="text-center space-y-2">
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                            正在生成结构化大纲
+                          </h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm">
+                            AI 正在构建详细的事件链、角色弧线和悬念设计。
+                            <br />
+                            <span className="text-primary-500 font-medium">
+                              生成完成后将自动转换为可读格式展示。
+                            </span>
+                          </p>
+                        </div>
+                        <div className="flex items-center space-x-2 text-xs text-gray-400 dark:text-gray-500">
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-gray-400"></span>
+                          </span>
+                          <span>当前内容为中间格式，仅用于进度观察</span>
+                        </div>
+                      </div>
                     </div>
                   )}
+
+                  {/* Small indicator in corner */}
+                  {isStreaming && (
+                    <div className="absolute bottom-3 right-3 flex items-center space-x-2 text-xs text-gray-400 dark:text-gray-500 bg-white/50 dark:bg-black/50 px-2 py-1 rounded z-10">
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary-500"></span>
+                      </span>
+                      <span>
+                        已接收 {generatedOutline.length.toLocaleString()} 字符
+                      </span>
+                    </div>
+                  )}
+
                   {/* Warning when in readable mode and structured */}
                   {outlineViewMode === "readable" &&
                     currentVersion?.isStructured &&
@@ -992,13 +1041,13 @@ function NovelDetail() {
                     onChange={(e) => setGeneratedOutline(e.target.value)}
                     readOnly={isStreaming || currentVersion?.isLocked === 1}
                     className={cn(
-                      "w-full px-5 py-4 glass rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 min-h-[500px] resize-y",
+                      "w-full px-5 py-4 glass rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 min-h-[500px] resize-y transition-opacity",
                       // 视图模式样式
                       outlineViewMode === "readable" &&
                         currentVersion?.isStructured
                         ? "font-sans text-base leading-loose tracking-wide"
                         : "font-mono text-sm leading-relaxed",
-                      isStreaming && "opacity-90",
+                      isStreaming && "opacity-30 pointer-events-none",
                       currentVersion?.isLocked === 1 &&
                         "bg-gray-50 dark:bg-gray-900/50 text-gray-500 cursor-not-allowed",
                     )}
