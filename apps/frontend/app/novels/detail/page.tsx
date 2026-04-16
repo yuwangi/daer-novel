@@ -215,13 +215,51 @@ function NovelDetail() {
 
   const handleManualSave = async () => {
     try {
+      let contentToSave = generatedOutline;
+
+      // 如果是结构化大纲且在可读视图下
+      if (
+        currentVersion?.isStructured &&
+        outlineViewMode === "readable" &&
+        currentVersion.content
+      ) {
+        // 检查用户是否编辑了内容
+        const isDisplayContent =
+          currentVersion.displayContent === generatedOutline;
+
+        if (isDisplayContent) {
+          // 用户没有编辑，保存原始 JSON
+          contentToSave = currentVersion.content;
+          toast.info("已保存原始结构化数据（可读视图下未编辑）");
+        } else {
+          // 用户编辑了内容，需要警告
+          const userConfirmed = window.confirm(
+            "⚠️ 警告：您正在可读视图下编辑大纲。\n\n" +
+              "可读视图是从原始 JSON 转换生成的，在此视图下保存会：\n" +
+              "1. 丢失结构化数据（无法切换视图、无法显示统计信息）\n" +
+              "2. 保存为纯文本格式\n\n" +
+              "确定要继续保存吗？\n\n" +
+              "建议：取消后切换到「原始 JSON」视图进行编辑。",
+          );
+
+          if (!userConfirmed) {
+            return;
+          }
+          // 用户确认后，保存编辑后的内容（会丢失结构化）
+          toast.warning("已保存为纯文本格式（结构化数据已丢失）");
+        }
+      }
+
       await novelsAPI.saveOutlineVersion(novelId, {
-        content: generatedOutline,
+        content: contentToSave,
         mode: "manual",
         context: currentVersion?.generationContext,
       });
       await loadOutlineVersions();
-      toast.success("手动保存成功");
+
+      if (contentToSave === generatedOutline || !currentVersion?.isStructured) {
+        toast.success("手动保存成功");
+      }
     } catch (error) {
       console.error("Failed to save:", error);
       toast.error("保存失败");

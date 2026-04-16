@@ -202,6 +202,18 @@ export class OutlineService extends BaseService {
       mystery: "悬疑冲突（解谜、调查、真相揭露等）",
     };
 
+    const translateConflictType = (type: string | undefined): string => {
+      if (!type) return "未设定";
+
+      if (type.includes("|")) {
+        const types = type.split("|").map((t) => t.trim());
+        const translated = types.map((t) => conflictTypeLabels[t] || t);
+        return translated.join("、");
+      }
+
+      return conflictTypeLabels[type] || type;
+    };
+
     const phaseTypeLabels: Record<string, string> = {
       exposition: "开篇",
       rising_action: "上升",
@@ -221,6 +233,7 @@ export class OutlineService extends BaseService {
     const phaseIdToName = new Map<string, string>();
     const eventIdToTitle = new Map<string, string>();
     const eventIdToPhaseName = new Map<string, string>();
+    const eventIndexToTitle = new Map<string, string>();
 
     outline.phases?.forEach((phase, pIndex) => {
       const phaseDisplayName = `阶段 ${pIndex + 1}：${phase.phaseName}`;
@@ -230,11 +243,29 @@ export class OutlineService extends BaseService {
         const eventDisplayName = `事件 ${eIndex + 1}「${event.title}」`;
         eventIdToTitle.set(event.id, eventDisplayName);
         eventIdToPhaseName.set(event.id, phaseDisplayName);
+
+        const eventIndexKey = `事件${pIndex + 1}_${eIndex + 1}`;
+        eventIndexToTitle.set(eventIndexKey, eventDisplayName);
+        eventIndexToTitle.set(eventIndexKey.toLowerCase(), eventDisplayName);
       });
     });
 
     const getPhaseName = (phaseId: string): string => {
-      return phaseIdToName.get(phaseId) || phaseId;
+      if (phaseIdToName.has(phaseId)) {
+        return phaseIdToName.get(phaseId)!;
+      }
+
+      const phaseMatch = phaseId.match(/phase_?(\d+)/i);
+      if (phaseMatch) {
+        const phaseNum = parseInt(phaseMatch[1]);
+        for (const [, name] of phaseIdToName.entries()) {
+          if (name.includes(`阶段 ${phaseNum}：`)) {
+            return name;
+          }
+        }
+      }
+
+      return phaseId;
     };
 
     const getPhaseNames = (phaseIds: string[]): string => {
@@ -242,7 +273,35 @@ export class OutlineService extends BaseService {
     };
 
     const getEventName = (eventId: string): string => {
-      return eventIdToTitle.get(eventId) || eventId;
+      if (eventIdToTitle.has(eventId)) {
+        return eventIdToTitle.get(eventId)!;
+      }
+
+      if (eventIndexToTitle.has(eventId)) {
+        return eventIndexToTitle.get(eventId)!;
+      }
+
+      const eventMatch = eventId.match(/event_?(\d+)_?(\d+)/i);
+      if (eventMatch) {
+        const phaseNum = parseInt(eventMatch[1]);
+        const eventNum = parseInt(eventMatch[2]);
+        const eventIndexKey = `事件${phaseNum}_${eventNum}`;
+        if (eventIndexToTitle.has(eventIndexKey)) {
+          return eventIndexToTitle.get(eventIndexKey)!;
+        }
+      }
+
+      const chineseEventMatch = eventId.match(
+        /事件[零一二三四五六七八九十\d]+[_/][零一二三四五六七八九十\d]+/,
+      );
+      if (chineseEventMatch) {
+        const key = eventId;
+        if (eventIndexToTitle.has(key)) {
+          return eventIndexToTitle.get(key)!;
+        }
+      }
+
+      return eventId;
     };
 
     let summary = `# 《${outline.novelTitle}》大纲概览\n\n`;
@@ -284,7 +343,7 @@ export class OutlineService extends BaseService {
           const eventIndex = eIndex + 1;
           summary += `\n##### 事件 ${eventIndex}：${event.title}\n`;
           summary += `- **涉及角色**：${event.characters?.join("、") || "未设定"}\n`;
-          summary += `- **冲突类型**：${conflictTypeLabels[event.conflictType] || event.conflictType || "未设定"}\n`;
+          summary += `- **冲突类型**：${translateConflictType(event.conflictType)}\n`;
           summary += `- **关键转折点**：${event.turningPoint || "未设定"}\n`;
           summary += `- **情感变化**：${event.emotionalShift || "未设定"}\n`;
           summary += `- **事件结果**：${event.outcome || "未设定"}\n`;
@@ -336,7 +395,8 @@ export class OutlineService extends BaseService {
     if (outline.plotThreads?.length) {
       summary += `\n\n## 四、情节线追踪 (共 ${outline.plotThreads.length} 条)\n\n`;
       outline.plotThreads.forEach((thread) => {
-        const threadType = threadTypeLabels[thread.threadType] || thread.threadType;
+        const threadType =
+          threadTypeLabels[thread.threadType] || thread.threadType;
         summary += `### ${threadType}：${thread.threadName}\n`;
         summary += `- **情节线描述**：${thread.description || "未设定"}\n`;
 
@@ -362,14 +422,33 @@ export class OutlineService extends BaseService {
 
     if (outline.characterArcs?.length) {
       summary += `## 五、角色弧线\n\n`;
-      outline.characterArcs.forEach((arc, index) => {
+      outline.characterArcs.forEach((arc) => {
         summary += `### ${arc.characterName} 的弧线\n`;
         summary += `- **弧线类型**：${arc.arcType || "未设定"}\n`;
 
         if (arc.keyEvents?.length) {
           summary += `- **关键发展事件**：\n`;
           arc.keyEvents.forEach((event, i) => {
-            summary += `  ${i + 1}. ${event}\n`;
+            let eventText = event;
+            const eventIdMatch = event.match(
+              /^事件[_/]?(\d+)[_/](\d+)[:：\s]+(.+)$/i,
+            );
+            if (eventIdMatch) {
+              const phaseNum = parseInt(eventIdMatch[1]);
+              const eventNum = parseInt(eventIdMatch[2]);
+              const eventDesc = eventIdMatch[3];
+
+              const eventIndexKey = `事件${phaseNum}_${eventNum}`;
+              if (eventIndexToTitle.has(eventIndexKey)) {
+                eventText = eventIndexToTitle.get(eventIndexKey)!;
+                if (eventDesc && !eventText.includes(eventDesc)) {
+                  eventText = `${eventText}：${eventDesc}`;
+                }
+              } else {
+                eventText = `事件 ${eventNum}「${eventDesc}」`;
+              }
+            }
+            summary += `  ${i + 1}. ${eventText}\n`;
           });
         }
 
