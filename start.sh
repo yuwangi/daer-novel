@@ -6,6 +6,36 @@ ulimit -n 65536 2>/dev/null || ulimit -n 10240
 echo "🔧 System File Limit: $(ulimit -n)"
 echo "================================"
 
+# 检查端口是否可用的函数
+is_port_available() {
+    local port=$1
+    # 使用 lsof 检查端口是否被占用
+    if lsof -ti :$port > /dev/null 2>&1; then
+        return 1  # 端口被占用
+    else
+        return 0  # 端口可用
+    fi
+}
+
+# 查找可用端口对的函数
+find_available_ports() {
+    local base_port=$1
+    local max_attempts=100
+    
+    for ((i=0; i<max_attempts; i++)); do
+        local fe_port=$((base_port + i * 10))
+        local be_port=$((fe_port + 1))
+        
+        if is_port_available $fe_port && is_port_available $be_port; then
+            echo "$fe_port $be_port"
+            return 0
+        fi
+    done
+    
+    echo ""
+    return 1
+}
+
 # 检查 Docker
 if ! command -v docker &> /dev/null; then
     echo "❌ 错误: 未安装 Docker"
@@ -63,10 +93,11 @@ if [ "$PORT_CONFLICT" = true ]; then
     echo "================================"
     echo "请选择处理方式:"
     echo "1) 终止占用进程并继续 (可能影响其他项目)"
-    echo "2) 修改端口后继续 (推荐，可并行运行多个项目)"
-    echo "3) 取消启动"
+    echo "2) 自动选择新端口并启动 (推荐，一键并行运行)"
+    echo "3) 修改端口后继续"
+    echo "4) 取消启动"
     echo "================================"
-    read -p "请输入选项 (1/2/3): " PORT_CHOICE
+    read -p "请输入选项 (1/2/3/4): " PORT_CHOICE
     
     case $PORT_CHOICE in
         1)
@@ -83,6 +114,47 @@ if [ "$PORT_CONFLICT" = true ]; then
             fi
             ;;
         2)
+            # 自动选择新端口并启动
+            echo ""
+            echo "🔍 正在查找可用端口..."
+            
+            # 从当前端口开始查找
+            PORTS=$(find_available_ports $FRONTEND_PORT)
+            
+            if [ -z "$PORTS" ]; then
+                echo "❌ 未找到可用端口，请尝试手动修改配置"
+                exit 1
+            fi
+            
+            # 解析找到的端口
+            NEW_FE_PORT=$(echo $PORTS | cut -d' ' -f1)
+            NEW_BE_PORT=$(echo $PORTS | cut -d' ' -f2)
+            
+            echo "✅ 找到可用端口:"
+            echo "   前端端口: $NEW_FE_PORT"
+            echo "   后端端口: $NEW_BE_PORT"
+            echo ""
+            echo "🔧 正在配置环境变量..."
+            
+            # 设置环境变量，这些变量将在启动时被使用
+            export FRONTEND_PORT=$NEW_FE_PORT
+            export BACKEND_PORT=$NEW_BE_PORT
+            export NEXT_PUBLIC_API_URL="http://localhost:$NEW_BE_PORT"
+            export CORS_ORIGIN="http://localhost:$NEW_FE_PORT"
+            export AUTH_BASE_URL="http://localhost:$NEW_BE_PORT/api/auth"
+            
+            echo "✅ 环境变量已配置:"
+            echo "   FRONTEND_PORT=$FRONTEND_PORT"
+            echo "   BACKEND_PORT=$BACKEND_PORT"
+            echo "   NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL"
+            echo "   CORS_ORIGIN=$CORS_ORIGIN"
+            echo "   AUTH_BASE_URL=$AUTH_BASE_URL"
+            echo ""
+            echo "💡 提示: 这些环境变量仅对本次启动有效，不会修改配置文件"
+            echo "   前端将在: http://localhost:$NEW_FE_PORT"
+            echo "   后端将在: http://localhost:$NEW_BE_PORT"
+            ;;
+        3)
             # 修改端口
             echo ""
             echo "💡 提示: 请修改 .env 文件中的端口配置"
@@ -125,7 +197,7 @@ if [ "$PORT_CONFLICT" = true ]; then
                 exit 1
             fi
             ;;
-        3)
+        4)
             # 取消启动
             echo "❌ 已取消启动"
             exit 0
