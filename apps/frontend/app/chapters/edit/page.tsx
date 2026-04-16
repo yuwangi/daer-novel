@@ -1,24 +1,38 @@
-'use client';
+"use client";
 
 // Note: In a pure 'use client' file, Next.js handles this via Suspense which is wrapping ChapterEditor
 
-
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { useTheme } from 'next-themes';
-import { Button } from '@/components/ui/button';
-import { tasksAPI, novelsAPI } from '@/lib/api';
-import { 
-  Loader2, Save, ArrowLeft, CheckCircle, AlertCircle, 
-  Sparkles, Settings, Type, PanelRightOpen, PanelRightClose, 
-  BookOpen, Home, ChevronRight, Menu, Maximize2, Minimize2, History, UserCheck
-} from 'lucide-react';
-import { toast } from 'sonner';
-import { ChatPanel } from '@/components/editor/ChatPanel';
-import { ChapterListSidebar } from '@/components/editor/ChapterListSidebar';
-import { SelectionMenu } from '@/components/editor/SelectionMenu';
-import { HistoryPanel } from '@/components/editor/HistoryPanel';
-import { getSelectionCoordinates } from '@/lib/textarea-utils';
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
+import { Button } from "@/components/ui/button";
+import { tasksAPI, novelsAPI } from "@/lib/api";
+import {
+  Loader2,
+  Save,
+  ArrowLeft,
+  CheckCircle,
+  AlertCircle,
+  Sparkles,
+  Settings,
+  Type,
+  PanelRightOpen,
+  PanelRightClose,
+  BookOpen,
+  Home,
+  ChevronRight,
+  Menu,
+  Maximize2,
+  Minimize2,
+  History,
+  UserCheck,
+} from "lucide-react";
+import { toast } from "sonner";
+import { ChatPanel } from "@/components/editor/ChatPanel";
+import { ChapterListSidebar } from "@/components/editor/ChapterListSidebar";
+import { SelectionMenu } from "@/components/editor/SelectionMenu";
+import { HistoryPanel } from "@/components/editor/HistoryPanel";
+import { getSelectionCoordinates } from "@/lib/textarea-utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,9 +47,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { DialogTrigger } from '@radix-ui/react-dialog';
-import { cn } from '@/lib/utils';
-import Link from 'next/link';
+import { DialogTrigger } from "@radix-ui/react-dialog";
+import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 interface Chapter {
   id: string;
@@ -68,14 +82,14 @@ interface Novel {
   }[];
 }
 
-type FontSize = 'sm' | 'base' | 'lg' | 'xl';
-type FontFamily = 'sans' | 'serif' | 'mono';
+type FontSize = "sm" | "base" | "lg" | "xl";
+type FontFamily = "sans" | "serif" | "mono";
 
 function ChapterEditor() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const chapterId = searchParams.get('id') as string;
-  
+  const chapterId = searchParams.get("id") as string;
+
   // Focus Mode State (Moved to top)
   const [isFocusMode, setIsFocusMode] = useState(false);
 
@@ -84,26 +98,28 @@ function ChapterEditor() {
     setIsFocusMode(!isFocusMode);
     // Auto-close panels when entering focus mode
     if (!isFocusMode) {
-        setIsLeftSidebarOpen(false);
-        setIsRightPanelOpen(false);
+      setIsLeftSidebarOpen(false);
+      setIsRightPanelOpen(false);
     } else {
-        setIsLeftSidebarOpen(true);
-        setIsRightPanelOpen(true);
+      setIsLeftSidebarOpen(true);
+      setIsRightPanelOpen(true);
     }
   };
 
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [novel, setNovel] = useState<Novel | null>(null);
-  const [content, setContent] = useState('');
-  const [title, setTitle] = useState('');
-  const [outline, setOutline] = useState(''); // Chapter Outline
-  const [workOutline, setWorkOutline] = useState(''); // Novel Work Outline
-  
+  const [content, setContent] = useState("");
+  const [title, setTitle] = useState("");
+  const [outline, setOutline] = useState(""); // Chapter Outline
+  const [workOutline, setWorkOutline] = useState(""); // Novel Work Outline
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved' | 'error'>('saved');
-  const [lastSavedContent, setLastSavedContent] = useState('');
-  
+  const [saveStatus, setSaveStatus] = useState<
+    "saved" | "saving" | "unsaved" | "error"
+  >("saved");
+  const [lastSavedContent, setLastSavedContent] = useState("");
+
   // Side Panel State
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(false);
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
@@ -111,22 +127,25 @@ function ChapterEditor() {
 
   // Settings State
   const { theme, setTheme } = useTheme();
-  const [fontSize, setFontSize] = useState<FontSize>('lg');
-  const [fontFamily, setFontFamily] = useState<FontFamily>('serif');
+  const [fontSize, setFontSize] = useState<FontSize>("lg");
+  const [fontFamily, setFontFamily] = useState<FontFamily>("serif");
 
   // Modals
   const [isWorkOutlineOpen, setIsWorkOutlineOpen] = useState(false);
   const [isChapterOutlineOpen, setIsChapterOutlineOpen] = useState(false);
-  
+
   // OOC Check State
   const [isOocChecking, setIsOocChecking] = useState(false);
-  const [oocResult, setOocResult] = useState<{ passed: boolean; issues: string[]; suggestions?: string[] } | null>(null);
+  const [oocResult, setOocResult] = useState<{
+    passed: boolean;
+    issues: string[];
+    suggestions?: string[];
+  } | null>(null);
   const [isOocModalOpen, setIsOocModalOpen] = useState(false);
 
   const contentRef = useRef(content);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const prevContentLengthRef = useRef<number>(0); // Track previous content length for daily word counting
   // Chat Panel Ref
   const chatPanelRef = useRef<{ sendMessage: (msg: string) => void }>(null);
 
@@ -135,30 +154,22 @@ function ChapterEditor() {
     contentRef.current = content;
   }, [content]);
 
-  // Track daily word count: accumulate typed chars into localStorage
-  useEffect(() => {
-    const len = content.length;
-    const prev = prevContentLengthRef.current;
-    const delta = len - prev;
-    if (delta > 0 && prev > 0) {
-      const today = new Date().toISOString().split('T')[0];
-      const key = `writing-words-${today}`;
-      const existing = parseInt(localStorage.getItem(key) || '0', 10);
-      localStorage.setItem(key, String(existing + delta));
-    }
-    prevContentLengthRef.current = len;
-  }, [content]);
-
   // Load Settings
   useEffect(() => {
-    const savedFontSize = localStorage.getItem('editor-font-size') as FontSize;
-    const savedFontFamily = localStorage.getItem('editor-font-family') as FontFamily;
-    
+    const savedFontSize = localStorage.getItem("editor-font-size") as FontSize;
+    const savedFontFamily = localStorage.getItem(
+      "editor-font-family",
+    ) as FontFamily;
+
     if (savedFontSize) setFontSize(savedFontSize);
     if (savedFontFamily) setFontFamily(savedFontFamily);
   }, []);
 
-  const updateSetting = (key: string, value: string, setter: (val: any) => void) => {
+  const updateSetting = (
+    key: string,
+    value: string,
+    setter: (val: any) => void,
+  ) => {
     setter(value);
     localStorage.setItem(key, value);
   };
@@ -167,10 +178,10 @@ function ChapterEditor() {
   const handleRewrite = (text: string, prompt?: string) => {
     if (!isRightPanelOpen) setIsRightPanelOpen(true);
     // Determine prompt based on input
-    const finalPrompt = prompt 
+    const finalPrompt = prompt
       ? `请根据以下要求改写这段文字：\n\n【要求】：${prompt}\n\n【原文】：${text}`
       : `请润色这段文字，使其更加生动流畅：\n\n${text}`;
-    
+
     // Slight delay to ensure panel is open
     setTimeout(() => {
       chatPanelRef.current?.sendMessage(finalPrompt);
@@ -188,30 +199,31 @@ function ChapterEditor() {
   const handleAutoExpand = () => {
     if (!isRightPanelOpen) setIsRightPanelOpen(true);
     // Get last paragraph or last few chars as context
-    const context = content.slice(-500); 
+    const context = content.slice(-500);
     const prompt = `请接着上文继续扩写，保持风格一致，推动剧情发展：\n\n上文片段：\n${context}`;
     setTimeout(() => {
-        chatPanelRef.current?.sendMessage(prompt);
+      chatPanelRef.current?.sendMessage(prompt);
     }, 100);
   };
 
   const handleOocCheck = async () => {
     if (!content.trim()) {
-      toast.warning('正文为空，无法检测');
+      toast.warning("正文为空，无法检测");
       return;
     }
-    
+
     setIsOocChecking(true);
     setOocResult(null);
     try {
       // Check the latest written content (e.g., last 2000 chars) for performance, or full content
-      const textToCheck = content.length > 3000 ? content.slice(-3000) : content;
+      const textToCheck =
+        content.length > 3000 ? content.slice(-3000) : content;
       const res = await tasksAPI.checkOoc(chapterId, textToCheck);
       setOocResult(res.data);
       setIsOocModalOpen(true);
     } catch (error: any) {
-      console.error('OOC Check failed:', error);
-      toast.error(error.message || '角色一致性检测失败');
+      console.error("OOC Check failed:", error);
+      toast.error(error.message || "角色一致性检测失败");
     } finally {
       setIsOocChecking(false);
     }
@@ -224,13 +236,13 @@ function ChapterEditor() {
         // 1. Fetch Chapter
         const chapterRes = await tasksAPI.getChapter(chapterId);
         const chapterData = chapterRes.data;
-        
+
         setChapter(chapterData);
         setTitle(chapterData.title);
         // Ensure content has initial indent if empty? Maybe not enforced on load, only input.
-        setContent(chapterData.content || '');
-        setLastSavedContent(chapterData.content || '');
-        setOutline(chapterData.outline || '');
+        setContent(chapterData.content || "");
+        setLastSavedContent(chapterData.content || "");
+        setOutline(chapterData.outline || "");
 
         // 2. Fetch Novel Structure
         const novelRes = await novelsAPI.get(chapterData.novelId);
@@ -240,26 +252,35 @@ function ChapterEditor() {
         // 3. Fetch Outline Versions (if not included in novel response, try separate endpoint)
         // Attempt to get outline from novel data if available, or fetch
         if (novelData.outlineVersions && novelData.outlineVersions.length > 0) {
-           // Sort by createdAt desc
-           const sorted = [...novelData.outlineVersions].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-           setWorkOutline(sorted[0].content);
+          // Sort by createdAt desc
+          const sorted = [...novelData.outlineVersions].sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          );
+          setWorkOutline(sorted[0].content);
         } else {
-           // Try fetching separate endpoint if applicable
-           try {
-             const outlineRes = await novelsAPI.getOutlineVersions(chapterData.novelId);
-             if (outlineRes.data && outlineRes.data.length > 0) {
-                const sorted = [...outlineRes.data].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-                setWorkOutline(sorted[0].content);
-             }
-           } catch (e) {
-             console.warn("Failed to fetch outline versions", e);
-           }
+          // Try fetching separate endpoint if applicable
+          try {
+            const outlineRes = await novelsAPI.getOutlineVersions(
+              chapterData.novelId,
+            );
+            if (outlineRes.data && outlineRes.data.length > 0) {
+              const sorted = [...outlineRes.data].sort(
+                (a: any, b: any) =>
+                  new Date(b.createdAt).getTime() -
+                  new Date(a.createdAt).getTime(),
+              );
+              setWorkOutline(sorted[0].content);
+            }
+          } catch (e) {
+            console.warn("Failed to fetch outline versions", e);
+          }
         }
 
         setIsLoading(false);
       } catch (error) {
-        console.error('Failed to load data:', error);
-        toast.error('加载数据失败');
+        console.error("Failed to load data:", error);
+        toast.error("加载数据失败");
         setIsLoading(false);
       }
     };
@@ -267,44 +288,47 @@ function ChapterEditor() {
   }, [chapterId]);
 
   // Save Logic
-  const saveContent = useCallback(async (manual = false) => {
-    if (!chapter) return;
-    
-    if (!manual && contentRef.current === lastSavedContent) {
-      if (manual) toast.success('已是最新内容');
-      return;
-    }
+  const saveContent = useCallback(
+    async (manual = false) => {
+      if (!chapter) return;
 
-    setSaveStatus('saving');
-    setIsSaving(true);
-    
-    try {
-      await tasksAPI.updateChapter(chapter.id, {
-        content: contentRef.current,
-        title: title 
-      });
-      
-      setLastSavedContent(contentRef.current);
-      setSaveStatus('saved');
-      if (manual) toast.success('保存成功');
-    } catch (error) {
-      console.error('Failed to save:', error);
-      setSaveStatus('error');
-      if (manual) toast.error('保存失败');
-    } finally {
-      setIsSaving(false);
-    }
-  }, [chapter, lastSavedContent, title]);
+      if (!manual && contentRef.current === lastSavedContent) {
+        if (manual) toast.success("已是最新内容");
+        return;
+      }
+
+      setSaveStatus("saving");
+      setIsSaving(true);
+
+      try {
+        await tasksAPI.updateChapter(chapter.id, {
+          content: contentRef.current,
+          title: title,
+        });
+
+        setLastSavedContent(contentRef.current);
+        setSaveStatus("saved");
+        if (manual) toast.success("保存成功");
+      } catch (error) {
+        console.error("Failed to save:", error);
+        setSaveStatus("error");
+        if (manual) toast.error("保存失败");
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [chapter, lastSavedContent, title],
+  );
 
   // Delayed Auto-save
   useEffect(() => {
     if (content !== lastSavedContent) {
-      setSaveStatus('unsaved');
+      setSaveStatus("unsaved");
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => saveContent(), 2000);
     }
     return () => {
-       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
   }, [content, lastSavedContent, saveContent]);
 
@@ -313,21 +337,22 @@ function ChapterEditor() {
     if (isFocusMode && textareaRef.current) {
       const textarea = textareaRef.current;
       const { selectionStart } = textarea;
-      
+
       // Use requestAnimationFrame to ensure we scroll after render
       requestAnimationFrame(() => {
-          const coords = getSelectionCoordinates(textarea, selectionStart);
-          const lineHeight = coords.height;
-          const textareaHeight = textarea.clientHeight;
-          
-          // Calculate desired scroll top to center the cursor
-          // Target: cursorTop at 40% of screen height (slightly above center)
-          const targetScrollTop = coords.top - (textareaHeight * 0.4) + (lineHeight / 2);
-          
-          textarea.scrollTo({
-              top: Math.max(0, targetScrollTop),
-              behavior: 'smooth' 
-          });
+        const coords = getSelectionCoordinates(textarea, selectionStart);
+        const lineHeight = coords.height;
+        const textareaHeight = textarea.clientHeight;
+
+        // Calculate desired scroll top to center the cursor
+        // Target: cursorTop at 40% of screen height (slightly above center)
+        const targetScrollTop =
+          coords.top - textareaHeight * 0.4 + lineHeight / 2;
+
+        textarea.scrollTo({
+          top: Math.max(0, targetScrollTop),
+          behavior: "smooth",
+        });
       });
     }
   }, [content, isFocusMode]);
@@ -336,41 +361,58 @@ function ChapterEditor() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Save
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
         saveContent(true);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [saveContent]);
 
   // Handle Textarea KeyDown for Indentation
-  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter') {
+  const handleTextareaKeyDown = (
+    e: React.KeyboardEvent<HTMLTextAreaElement>,
+  ) => {
+    if (e.key === "Enter") {
       e.preventDefault();
       const textarea = e.currentTarget;
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
       const value = textarea.value;
-      
+
       // Insert newline + 2 full-width spaces
-      const insertion = '\n\u3000\u3000';
-      const newValue = value.substring(0, start) + insertion + value.substring(end);
-      
+      const insertion = "\n\u3000\u3000";
+      const newValue =
+        value.substring(0, start) + insertion + value.substring(end);
+
       setContent(newValue);
-      
+
       // Move cursor
       setTimeout(() => {
-        textarea.selectionStart = textarea.selectionEnd = start + insertion.length;
+        textarea.selectionStart = textarea.selectionEnd =
+          start + insertion.length;
       }, 0);
     }
   };
 
   const getTextareaClass = () => {
-    const base = "w-full h-full p-8 md:p-12 lg:px-24 resize-none focus:outline-none bg-transparent leading-relaxed transition-all duration-300 selection:bg-primary/20";
-    const font = fontFamily === 'mono' ? 'font-mono' : fontFamily === 'sans' ? 'font-sans' : 'font-serif';
-    const size = fontSize === 'sm' ? 'text-base' : fontSize === 'base' ? 'text-lg' : fontSize === 'lg' ? 'text-xl' : 'text-2xl';
+    const base =
+      "w-full h-full p-8 md:p-12 lg:px-24 resize-none focus:outline-none bg-transparent leading-relaxed transition-all duration-300 selection:bg-primary/20";
+    const font =
+      fontFamily === "mono"
+        ? "font-mono"
+        : fontFamily === "sans"
+          ? "font-sans"
+          : "font-serif";
+    const size =
+      fontSize === "sm"
+        ? "text-base"
+        : fontSize === "base"
+          ? "text-lg"
+          : fontSize === "lg"
+            ? "text-xl"
+            : "text-2xl";
     return `${base} ${font} ${size}`;
   };
 
@@ -387,106 +429,116 @@ function ChapterEditor() {
       <div className="flex flex-col items-center justify-center h-screen bg-background text-muted-foreground">
         <AlertCircle className="w-10 h-10 mb-2" />
         <p>章节不存在</p>
-        <Button variant="link" onClick={() => router.back()}>返回</Button>
+        <Button variant="link" onClick={() => router.back()}>
+          返回
+        </Button>
       </div>
     );
   }
 
   // Find Volume Name
-  const currentVolume = novel?.volumes.find(v => v.id === chapter.volumeId);
+  const currentVolume = novel?.volumes.find((v) => v.id === chapter.volumeId);
 
   // Prepare sorted volumes for sidebar
-  const sortedVolumes = novel?.volumes
-    .sort((a, b) => a.order - b.order)
-    .map(v => ({
-      id: v.id,
-      title: v.title,
-      order: v.order,
-      chapters: v.chapters
-        .sort((a: any, b: any) => a.order - b.order)
-        .map((c: any, index: number) => ({
-          id: c.id,
-          title: `第${c.order || index + 1}章 ${c.title}`, // Add Chapter Prefix
-          volumeId: v.id
-        }))
-    })) || [];
-
+  const sortedVolumes =
+    novel?.volumes
+      .sort((a, b) => a.order - b.order)
+      .map((v) => ({
+        id: v.id,
+        title: v.title,
+        order: v.order,
+        chapters: v.chapters
+          .sort((a: any, b: any) => a.order - b.order)
+          .map((c: any, index: number) => ({
+            id: c.id,
+            title: `第${c.order || index + 1}章 ${c.title}`, // Add Chapter Prefix
+            volumeId: v.id,
+          })),
+      })) || [];
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground relative">
-      
       {/* Focus Mode Exit Button (Floating) */}
       {isFocusMode && (
-         <Button 
-            variant="ghost" 
-            size="icon" 
-            className="fixed top-4 right-4 z-50 opacity-20 hover:opacity-100 transition-opacity"
-            onClick={toggleFocusMode}
-            title="退出专注模式"
-         >
-            <Maximize2 className="w-5 h-5" />
-         </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="fixed top-4 right-4 z-50 opacity-20 hover:opacity-100 transition-opacity"
+          onClick={toggleFocusMode}
+          title="退出专注模式"
+        >
+          <Maximize2 className="w-5 h-5" />
+        </Button>
       )}
 
       {/* 1. Left Sidebar (Chapter List) - 260px */}
-      <div 
+      <div
         className={cn(
           "border-r border-border bg-background/50 backdrop-blur-sm transition-all duration-500 flex flex-col relative z-20",
-          isLeftSidebarOpen && !isFocusMode ? "w-[260px]" : "w-0 opacity-0 overflow-hidden"
+          isLeftSidebarOpen && !isFocusMode
+            ? "w-[260px]"
+            : "w-0 opacity-0 overflow-hidden",
         )}
       >
         {novel && (
           <div className="flex-1 overflow-hidden">
-             <div className="h-14 border-b border-border font-semibold truncate flex items-center gap-2 px-4 shrink-0">
-                <BookOpen className="w-4 h-4 text-primary" />
-                {novel.title}
-             </div>
-             <div className="flex-1 h-[calc(100%-53px)]">
-                <ChapterListSidebar 
-                  novelId={novel.id} 
-                  volumes={sortedVolumes} // Pass sorted volumes
-                  currentChapterId={chapter.id}
-                  className="border-0 bg-transparent h-full"
-                />
-             </div>
+            <div className="h-14 border-b border-border font-semibold truncate flex items-center gap-2 px-4 shrink-0">
+              <BookOpen className="w-4 h-4 text-primary" />
+              {novel.title}
+            </div>
+            <div className="flex-1 h-[calc(100%-53px)]">
+              <ChapterListSidebar
+                novelId={novel.id}
+                volumes={sortedVolumes} // Pass sorted volumes
+                currentChapterId={chapter.id}
+                className="border-0 bg-transparent h-full"
+              />
+            </div>
           </div>
         )}
       </div>
 
       {/* 2. Center (Editor) - Flex 1 */}
       <div className="flex-1 flex flex-col h-full relative transition-all duration-300 min-w-0 bg-background">
-        
         {/* Header - Hidden in Focus Mode */}
-        <header 
-            className={cn(
-                "h-14 border-b border-border bg-background/80 backdrop-blur-sm flex items-center justify-between px-4 sticky top-0 z-10 shrink-0 transition-all duration-500",
-                isFocusMode ? "h-0 opacity-0 overflow-hidden border-0" : ""
-            )}
+        <header
+          className={cn(
+            "h-14 border-b border-border bg-background/80 backdrop-blur-sm flex items-center justify-between px-4 sticky top-0 z-10 shrink-0 transition-all duration-500",
+            isFocusMode ? "h-0 opacity-0 overflow-hidden border-0" : "",
+          )}
         >
-          
           {/* Left: Breadcrumbs */}
           <div className="flex items-center gap-2 text-sm text-muted-foreground overflow-hidden">
-            <Button 
-               variant="ghost" 
-               size="icon" 
-               onClick={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)} 
-               className={cn("h-8 w-8 hover:bg-accent -ml-2", isLeftSidebarOpen && "bg-accent/50")}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
+              className={cn(
+                "h-8 w-8 hover:bg-accent -ml-2",
+                isLeftSidebarOpen && "bg-accent/50",
+              )}
             >
-               <Menu className="w-4 h-4" />
+              <Menu className="w-4 h-4" />
             </Button>
 
-            <Link href="/" className="hover:text-foreground hover:bg-accent rounded-md p-1 transition-colors">
+            <Link
+              href="/"
+              className="hover:text-foreground hover:bg-accent rounded-md p-1 transition-colors"
+            >
               <Home className="w-4 h-4" />
             </Link>
             <ChevronRight className="w-3 h-3 opacity-50" />
-            
-            <Link href={`/novels/detail?id=${chapter.novelId}`} className="hover:text-foreground hover:underline truncate max-w-[120px]">
-              {novel?.title || '...'}
+
+            <Link
+              href={`/novels/detail?id=${chapter.novelId}`}
+              className="hover:text-foreground hover:underline truncate max-w-[120px]"
+            >
+              {novel?.title || "..."}
             </Link>
             <ChevronRight className="w-3 h-3 opacity-50" />
-            
+
             <span className="truncate max-w-[100px] opacity-80">
-              {currentVolume?.title || '...'}
+              {currentVolume?.title || "..."}
             </span>
             <ChevronRight className="w-3 h-3 opacity-50" />
 
@@ -497,57 +549,66 @@ function ChapterEditor() {
 
           {/* Right: Actions */}
           <div className="flex items-center gap-1.5">
-            
             {/* Outline Dialogs (Consolidated) */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 text-xs px-2.5 mr-2 gap-1">
-                   <BookOpen className="w-3.5 h-3.5" />
-                   <span className="hidden sm:inline">大纲</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs px-2.5 mr-2 gap-1"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">大纲</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuLabel>大纲查看</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <Dialog open={isWorkOutlineOpen} onOpenChange={setIsWorkOutlineOpen}>
-                   <DialogTrigger asChild>
-                     <div className="w-full cursor-pointer px-2 py-1.5 text-sm hover:bg-accent rounded-sm">
-                       作品大纲
-                     </div>
-                   </DialogTrigger>
-                   <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                     <DialogHeader>
-                       <DialogTitle>作品大纲</DialogTitle>
-                     </DialogHeader>
-                     <div className="min-h-[200px] text-sm text-foreground/80 whitespace-pre-wrap leading-relaxed">
-                        {workOutline || '暂无作品大纲內容'}
-                     </div>
-                   </DialogContent>
+                <Dialog
+                  open={isWorkOutlineOpen}
+                  onOpenChange={setIsWorkOutlineOpen}
+                >
+                  <DialogTrigger asChild>
+                    <div className="w-full cursor-pointer px-2 py-1.5 text-sm hover:bg-accent rounded-sm">
+                      作品大纲
+                    </div>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>作品大纲</DialogTitle>
+                    </DialogHeader>
+                    <div className="min-h-[200px] text-sm text-foreground/80 whitespace-pre-wrap leading-relaxed">
+                      {workOutline || "暂无作品大纲內容"}
+                    </div>
+                  </DialogContent>
                 </Dialog>
-                <Dialog open={isChapterOutlineOpen} onOpenChange={setIsChapterOutlineOpen}>
-                   <DialogTrigger asChild>
-                     <div className="w-full cursor-pointer px-2 py-1.5 text-sm hover:bg-accent rounded-sm mt-1">
-                       本章大纲
-                     </div>
-                   </DialogTrigger>
-                    <DialogContent className="max-w-xl">
-                     <DialogHeader>
-                       <DialogTitle>本章大纲</DialogTitle>
-                     </DialogHeader>
-                     <div className="min-h-[200px] text-sm whitespace-pre-wrap leading-relaxed">
-                        {outline || '暂无章节大纲'}
-                     </div>
-                   </DialogContent>
-                 </Dialog>
+                <Dialog
+                  open={isChapterOutlineOpen}
+                  onOpenChange={setIsChapterOutlineOpen}
+                >
+                  <DialogTrigger asChild>
+                    <div className="w-full cursor-pointer px-2 py-1.5 text-sm hover:bg-accent rounded-sm mt-1">
+                      本章大纲
+                    </div>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-xl">
+                    <DialogHeader>
+                      <DialogTitle>本章大纲</DialogTitle>
+                    </DialogHeader>
+                    <div className="min-h-[200px] text-sm whitespace-pre-wrap leading-relaxed">
+                      {outline || "暂无章节大纲"}
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </DropdownMenuContent>
             </DropdownMenu>
-            
+
             {/* AI Assistant Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="h-7 text-xs px-2.5 gap-1.5 border-primary/20 text-primary hover:bg-primary/5 mr-2"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
@@ -555,20 +616,27 @@ function ChapterEditor() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuItem onClick={handleAutoExpand} className="gap-2 cursor-pointer">
+                <DropdownMenuItem
+                  onClick={handleAutoExpand}
+                  className="gap-2 cursor-pointer"
+                >
                   <Sparkles className="w-3.5 h-3.5 text-primary" />
                   一键扩写
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem 
+                <DropdownMenuItem
                   onClick={(e) => {
                     e.preventDefault(); // Prevent closing immediately so we can show loading if needed
                     handleOocCheck();
-                  }} 
+                  }}
                   disabled={isOocChecking}
                   className="gap-2 cursor-pointer"
                 >
-                  {isOocChecking ? <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" /> : <UserCheck className="w-3.5 h-3.5 text-purple-600" />}
+                  {isOocChecking ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
+                  ) : (
+                    <UserCheck className="w-3.5 h-3.5 text-purple-600" />
+                  )}
                   OOC 检测
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -586,29 +654,47 @@ function ChapterEditor() {
                 <div className="py-4">
                   {oocResult ? (
                     <div className="space-y-4">
-                      <div className={cn("p-4 border rounded-md font-medium text-sm flex items-center gap-2", 
-                        oocResult.passed ? "bg-green-500/10 border-green-500/30 text-green-700" : "bg-red-500/10 border-red-500/30 text-red-700"
-                      )}>
+                      <div
+                        className={cn(
+                          "p-4 border rounded-md font-medium text-sm flex items-center gap-2",
+                          oocResult.passed
+                            ? "bg-green-500/10 border-green-500/30 text-green-700"
+                            : "bg-red-500/10 border-red-500/30 text-red-700",
+                        )}
+                      >
                         {oocResult.passed ? (
-                          <><CheckCircle className="w-4 h-4" /> 恭喜！当前片段未发现明显的角色崩坏 (OOC)。</>
+                          <>
+                            <CheckCircle className="w-4 h-4" />{" "}
+                            恭喜！当前片段未发现明显的角色崩坏 (OOC)。
+                          </>
                         ) : (
-                          <><AlertCircle className="w-4 h-4" /> 警告：发现可能存在的 OOC 行为！</>
+                          <>
+                            <AlertCircle className="w-4 h-4" />{" "}
+                            警告：发现可能存在的 OOC 行为！
+                          </>
                         )}
                       </div>
-                      
-                      {!oocResult.passed && oocResult.issues && oocResult.issues.length > 0 && (
-                        <div className="space-y-2">
-                          <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" /> 存在的问题：</h4>
-                          <ul className="list-disc pl-5 space-y-1 text-sm bg-accent/50 p-3 rounded-md">
-                            {oocResult.issues.map((issue, i) => (
-                              <li key={i}>{issue}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
+
+                      {!oocResult.passed &&
+                        oocResult.issues &&
+                        oocResult.issues.length > 0 && (
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+                              <AlertCircle className="w-3.5 h-3.5" />{" "}
+                              存在的问题：
+                            </h4>
+                            <ul className="list-disc pl-5 space-y-1 text-sm bg-accent/50 p-3 rounded-md">
+                              {oocResult.issues.map((issue, i) => (
+                                <li key={i}>{issue}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                     </div>
                   ) : (
-                    <div className="flex justify-center py-6 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin" /></div>
+                    <div className="flex justify-center py-6 text-muted-foreground">
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                    </div>
                   )}
                 </div>
               </DialogContent>
@@ -616,26 +702,45 @@ function ChapterEditor() {
 
             {/* Save Status (Compact) */}
             <div className="flex items-center gap-1.5 text-xs px-2 border-r border-border/50 mr-1 text-muted-foreground">
-               <span className="hidden sm:inline">字数: {content.length.toLocaleString()}</span>
-               <span className="sm:hidden">{content.length}</span>
-               
-               <div className="w-px h-3 bg-border mx-1" />
-               
-               {saveStatus === 'saved' && <span title="已保存"><CheckCircle className="w-3 h-3 text-muted-foreground" /></span>}
-               {saveStatus === 'saving' && <span title="保存中"><Loader2 className="w-3 h-3 animate-spin text-blue-500" /></span>}
-               {saveStatus === 'unsaved' && <span className="w-2 h-2 rounded-full bg-amber-500" title="未保存" />}
-               {saveStatus === 'error' && <span title="保存失败"><AlertCircle className="w-3 h-3 text-red-500" /></span>}
+              <span className="hidden sm:inline">
+                字数: {content.length.toLocaleString()}
+              </span>
+              <span className="sm:hidden">{content.length}</span>
+
+              <div className="w-px h-3 bg-border mx-1" />
+
+              {saveStatus === "saved" && (
+                <span title="已保存">
+                  <CheckCircle className="w-3 h-3 text-muted-foreground" />
+                </span>
+              )}
+              {saveStatus === "saving" && (
+                <span title="保存中">
+                  <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
+                </span>
+              )}
+              {saveStatus === "unsaved" && (
+                <span
+                  className="w-2 h-2 rounded-full bg-amber-500"
+                  title="未保存"
+                />
+              )}
+              {saveStatus === "error" && (
+                <span title="保存失败">
+                  <AlertCircle className="w-3 h-3 text-red-500" />
+                </span>
+              )}
             </div>
 
             {/* Focus Mode Toggle */}
-            <Button 
-               variant="ghost" 
-               size="icon" 
-               className="h-8 w-8 hover:bg-accent"
-               onClick={toggleFocusMode}
-               title="进入专注模式"
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 hover:bg-accent"
+              onClick={toggleFocusMode}
+              title="进入专注模式"
             >
-               <Maximize2 className="w-4 h-4 opacity-70" />
+              <Maximize2 className="w-4 h-4 opacity-70" />
             </Button>
 
             {/* Settings */}
@@ -648,57 +753,132 @@ function ChapterEditor() {
               <DropdownMenuContent align="end" className="w-60">
                 <DropdownMenuLabel>显示设置</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                
+
                 <div className="p-3 space-y-4">
                   <div>
                     <div className="text-xs text-muted-foreground mb-2 flex justify-between">
                       <span>主题</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                       <button onClick={() => setTheme('light')} 
-                         className={cn("text-xs border rounded py-1.5", theme === 'light' ? 'bg-primary/10 border-primary font-medium' : 'hover:bg-accent')}
-                       >亮色</button>
-                       <button onClick={() => setTheme('dark')}
-                         className={cn("text-xs border rounded py-1.5", theme === 'dark' ? 'bg-primary/10 border-primary font-medium' : 'hover:bg-accent')}
-                       >暗色</button>
+                      <button
+                        onClick={() => setTheme("light")}
+                        className={cn(
+                          "text-xs border rounded py-1.5",
+                          theme === "light"
+                            ? "bg-primary/10 border-primary font-medium"
+                            : "hover:bg-accent",
+                        )}
+                      >
+                        亮色
+                      </button>
+                      <button
+                        onClick={() => setTheme("dark")}
+                        className={cn(
+                          "text-xs border rounded py-1.5",
+                          theme === "dark"
+                            ? "bg-primary/10 border-primary font-medium"
+                            : "hover:bg-accent",
+                        )}
+                      >
+                        暗色
+                      </button>
                     </div>
                   </div>
 
                   <div>
-                     <div className="text-xs text-muted-foreground mb-2">字号</div>
-                     <div className="flex gap-1 justify-between text-sm">
-                       {['sm', 'base', 'lg', 'xl'].map((s) => (
-                         <button key={s} onClick={() => updateSetting('editor-font-size', s, setFontSize)}
-                           className={cn("px-2 py-1 rounded w-full border", fontSize === s ? 'bg-primary/10 border-primary font-medium' : 'hover:bg-accent border-transparent')}
-                         >{s === 'sm' ? '小' : s === 'base' ? '中' : s === 'lg' ? '大' : '超'}</button>
-                       ))}
-                     </div>
+                    <div className="text-xs text-muted-foreground mb-2">
+                      字号
+                    </div>
+                    <div className="flex gap-1 justify-between text-sm">
+                      {["sm", "base", "lg", "xl"].map((s) => (
+                        <button
+                          key={s}
+                          onClick={() =>
+                            updateSetting("editor-font-size", s, setFontSize)
+                          }
+                          className={cn(
+                            "px-2 py-1 rounded w-full border",
+                            fontSize === s
+                              ? "bg-primary/10 border-primary font-medium"
+                              : "hover:bg-accent border-transparent",
+                          )}
+                        >
+                          {s === "sm"
+                            ? "小"
+                            : s === "base"
+                              ? "中"
+                              : s === "lg"
+                                ? "大"
+                                : "超"}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  
+
                   <div>
-                     <div className="text-xs text-muted-foreground mb-2">字体</div>
-                     <div className="flex flex-col gap-1">
-                        <button onClick={() => updateSetting('editor-font-family', 'serif', setFontFamily)}
-                          className={cn("text-left px-2 py-1.5 rounded text-xs font-serif flex justify-between border", fontFamily === 'serif' ? 'bg-primary/10 border-primary' : 'hover:bg-accent border-transparent')}
-                        ><span>宋体 (Serif)</span> {fontFamily === 'serif' && <CheckCircle className="w-3 h-3" />}</button>
-                        <button onClick={() => updateSetting('editor-font-family', 'sans', setFontFamily)}
-                          className={cn("text-left px-2 py-1.5 rounded text-xs font-sans flex justify-between border", fontFamily === 'sans' ? 'bg-primary/10 border-primary' : 'hover:bg-accent border-transparent')}
-                        ><span>黑体 (Sans)</span> {fontFamily === 'sans' && <CheckCircle className="w-3 h-3" />}</button>
-                     </div>
+                    <div className="text-xs text-muted-foreground mb-2">
+                      字体
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <button
+                        onClick={() =>
+                          updateSetting(
+                            "editor-font-family",
+                            "serif",
+                            setFontFamily,
+                          )
+                        }
+                        className={cn(
+                          "text-left px-2 py-1.5 rounded text-xs font-serif flex justify-between border",
+                          fontFamily === "serif"
+                            ? "bg-primary/10 border-primary"
+                            : "hover:bg-accent border-transparent",
+                        )}
+                      >
+                        <span>宋体 (Serif)</span>{" "}
+                        {fontFamily === "serif" && (
+                          <CheckCircle className="w-3 h-3" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() =>
+                          updateSetting(
+                            "editor-font-family",
+                            "sans",
+                            setFontFamily,
+                          )
+                        }
+                        className={cn(
+                          "text-left px-2 py-1.5 rounded text-xs font-sans flex justify-between border",
+                          fontFamily === "sans"
+                            ? "bg-primary/10 border-primary"
+                            : "hover:bg-accent border-transparent",
+                        )}
+                      >
+                        <span>黑体 (Sans)</span>{" "}
+                        {fontFamily === "sans" && (
+                          <CheckCircle className="w-3 h-3" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>
 
             {/* Panel Toggle */}
-            <Button 
-              variant={isRightPanelOpen ? "secondary" : "ghost"} 
-              size="icon" 
+            <Button
+              variant={isRightPanelOpen ? "secondary" : "ghost"}
+              size="icon"
               onClick={() => setIsRightPanelOpen(!isRightPanelOpen)}
               className="h-8 w-8 hover:bg-accent"
               title={isRightPanelOpen ? "收起AI助手" : "展开AI助手"}
             >
-              {isRightPanelOpen ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
+              {isRightPanelOpen ? (
+                <PanelRightClose className="w-4 h-4" />
+              ) : (
+                <PanelRightOpen className="w-4 h-4" />
+              )}
             </Button>
 
             {/* History Toggle */}
@@ -711,10 +891,19 @@ function ChapterEditor() {
             >
               <History className="w-4 h-4" />
             </Button>
-            
+
             {/* Main Save Button */}
-            <Button size="sm" onClick={() => saveContent(true)} disabled={isSaving} className="h-8 ml-1 px-2.5">
-              {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            <Button
+              size="sm"
+              onClick={() => saveContent(true)}
+              disabled={isSaving}
+              className="h-8 ml-1 px-2.5"
+            >
+              {isSaving ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Save className="w-3.5 h-3.5" />
+              )}
               <span className="ml-1.5 hidden sm:inline">保存</span>
             </Button>
           </div>
@@ -722,40 +911,54 @@ function ChapterEditor() {
 
         {/* Editor Area */}
         <main className="flex-1 overflow-hidden relative">
-          
           {/* Floating Exit Button for Focus Mode */}
           {isFocusMode && (
-             <div className="fixed top-4 right-4 z-50 flex items-center gap-2 opacity-30 hover:opacity-100 transition-opacity">
-                <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-background border border-border/50 rounded-full shadow-sm text-muted-foreground mr-2">
-                   <span>{content.length.toLocaleString()} 字</span>
-                   {saveStatus === 'saved' && <CheckCircle className="w-3 h-3 text-muted-foreground" />}
-                   {saveStatus === 'saving' && <Loader2 className="w-3 h-3 animate-spin text-blue-500" />}
-                   {saveStatus === 'unsaved' && <span className="w-2 h-2 rounded-full bg-amber-500" />}
-                   {saveStatus === 'error' && <AlertCircle className="w-3 h-3 text-red-500" />}
-                </div>
-                <Button 
-                   variant="outline" 
-                   size="icon" 
-                   className="h-9 w-9 bg-background border-border/50 shadow-sm rounded-full"
-                   onClick={toggleFocusMode}
-                   title="退出专注模式"
-                >
-                   <Minimize2 className="w-4 h-4" />
-                </Button>
-             </div>
+            <div className="fixed top-4 right-4 z-50 flex items-center gap-2 opacity-30 hover:opacity-100 transition-opacity">
+              <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-background border border-border/50 rounded-full shadow-sm text-muted-foreground mr-2">
+                <span>{content.length.toLocaleString()} 字</span>
+                {saveStatus === "saved" && (
+                  <CheckCircle className="w-3 h-3 text-muted-foreground" />
+                )}
+                {saveStatus === "saving" && (
+                  <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
+                )}
+                {saveStatus === "unsaved" && (
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                )}
+                {saveStatus === "error" && (
+                  <AlertCircle className="w-3 h-3 text-red-500" />
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 bg-background border-border/50 shadow-sm rounded-full"
+                onClick={toggleFocusMode}
+                title="退出专注模式"
+              >
+                <Minimize2 className="w-4 h-4" />
+              </Button>
+            </div>
           )}
 
-          <SelectionMenu 
+          <SelectionMenu
             textareaRef={textareaRef}
-            onRewrite={handleRewrite} 
-            onExpand={handleExpand} 
+            onRewrite={handleRewrite}
+            onExpand={handleExpand}
           />
-          <div className={cn(
-             "h-full w-full mx-auto px-8 py-10 overflow-hidden transition-all duration-500 flex flex-col",
-             isFocusMode ? "max-w-3xl pt-24" : "max-w-4xl"
-          )}>
+          <div
+            className={cn(
+              "h-full w-full mx-auto px-8 py-10 overflow-hidden transition-all duration-500 flex flex-col",
+              isFocusMode ? "max-w-3xl pt-24" : "max-w-4xl",
+            )}
+          >
             {isFocusMode && (
-              <h1 className={cn("text-3xl font-bold mb-10 text-center opacity-80 shrink-0", fontFamily === 'serif' ? "font-serif" : "font-sans")}>
+              <h1
+                className={cn(
+                  "text-3xl font-bold mb-10 text-center opacity-80 shrink-0",
+                  fontFamily === "serif" ? "font-serif" : "font-sans",
+                )}
+              >
                 {chapter?.title}
               </h1>
             )}
@@ -773,32 +976,39 @@ function ChapterEditor() {
       </div>
 
       {/* 3. Right Panel (AI Assistant) - 350px */}
-      <div 
+      <div
         className={cn(
           "h-full border-l border-border bg-background transition-all duration-500 ease-in-out flex flex-col z-20",
-          isRightPanelOpen && !isFocusMode ? "w-[350px]" : "w-0 opacity-0 overflow-hidden"
+          isRightPanelOpen && !isFocusMode
+            ? "w-[350px]"
+            : "w-0 opacity-0 overflow-hidden",
         )}
       >
         <div className="flex-1 flex flex-col h-full overflow-hidden">
           {/* Header for Right Panel */}
           <div className="h-14 border-b border-border flex items-center px-4 justify-between bg-muted/10 shrink-0">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                 <Sparkles className="w-4 h-4 text-primary" />
-                 AI 助手
-              </div>
-              <Button variant="ghost" size="icon" onClick={() => setIsRightPanelOpen(false)} className="h-6 w-6 opacity-50 hover:opacity-100">
-                <PanelRightClose className="w-3.5 h-3.5" />
-              </Button>
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Sparkles className="w-4 h-4 text-primary" />
+              AI 助手
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsRightPanelOpen(false)}
+              className="h-6 w-6 opacity-50 hover:opacity-100"
+            >
+              <PanelRightClose className="w-3.5 h-3.5" />
+            </Button>
           </div>
-          
+
           <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-             <ChatPanel 
-                 ref={chatPanelRef}
-                 novelId={chapter.novelId} 
-                 currentContent={content} 
-                 className="h-full border-0 shadow-none bg-transparent"
-                 showHeader={false}
-              />
+            <ChatPanel
+              ref={chatPanelRef}
+              novelId={chapter.novelId}
+              currentContent={content}
+              className="h-full border-0 shadow-none bg-transparent"
+              showHeader={false}
+            />
           </div>
         </div>
       </div>
@@ -807,7 +1017,9 @@ function ChapterEditor() {
       <div
         className={cn(
           "h-full border-l border-border bg-background transition-all duration-500 ease-in-out flex flex-col z-20",
-          isHistoryOpen && !isFocusMode ? "w-[300px]" : "w-0 opacity-0 overflow-hidden"
+          isHistoryOpen && !isFocusMode
+            ? "w-[300px]"
+            : "w-0 opacity-0 overflow-hidden",
         )}
       >
         <HistoryPanel
@@ -816,7 +1028,7 @@ function ChapterEditor() {
           onRestore={(restoredContent) => {
             setContent(restoredContent);
             setLastSavedContent(restoredContent);
-            setSaveStatus('saved');
+            setSaveStatus("saved");
           }}
           className="h-full"
         />
@@ -827,9 +1039,13 @@ function ChapterEditor() {
 
 export default function ChapterEditorPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-screen bg-background text-foreground">
-      <Loader2 className="w-8 h-8 animate-spin text-primary" />
-    </div>}>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-screen bg-background text-foreground">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      }
+    >
       <ChapterEditor />
     </Suspense>
   );
