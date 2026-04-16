@@ -610,7 +610,31 @@ router.get("/:id/outline/versions", async (req: AuthRequest, res, next) => {
   try {
     const { outlineService } = await import("../services/outline.service");
     const versions = await outlineService.getVersions(req.params.id);
-    res.json(versions);
+
+    const enhancedVersions = versions.map((version: any) => {
+      const parseResult = outlineService.parseOutlineContent(version.content);
+
+      let displayContent = version.content;
+      let isStructured = false;
+      let outlineStats: any = null;
+
+      if (parseResult.success && parseResult.data) {
+        isStructured = true;
+        displayContent = outlineService.generateHumanReadableSummary(
+          parseResult.data,
+        );
+        outlineStats = outlineService.getOutlineStats(parseResult.data);
+      }
+
+      return {
+        ...version,
+        displayContent,
+        isStructured,
+        outlineStats,
+      };
+    });
+
+    res.json(enhancedVersions);
   } catch (error) {
     next(error);
   }
