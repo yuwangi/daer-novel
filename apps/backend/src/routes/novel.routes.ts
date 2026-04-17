@@ -466,9 +466,37 @@ router.delete(
   "/:novelId/characters/:characterId",
   async (req: AuthRequest, res, next) => {
     try {
+      const { novelId, characterId } = req.params;
+      const targetCharacterId = String(characterId).toLowerCase();
+
+      const allCharacters = await db.query.characters.findMany({
+        where: eq(schema.characters.novelId, novelId),
+      });
+
+      for (const char of allCharacters) {
+        const currentCharId = String(char.id).toLowerCase();
+        if (currentCharId === targetCharacterId) continue;
+
+        if (char.relationships && char.relationships.length > 0) {
+          const filteredRelationships = char.relationships.filter(
+            (r) => String(r.characterId).toLowerCase() !== targetCharacterId,
+          );
+
+          if (filteredRelationships.length !== char.relationships.length) {
+            await db
+              .update(schema.characters)
+              .set({
+                relationships: filteredRelationships,
+                updatedAt: new Date(),
+              })
+              .where(eq(schema.characters.id, char.id));
+          }
+        }
+      }
+
       await db
         .delete(schema.characters)
-        .where(eq(schema.characters.id, req.params.characterId));
+        .where(eq(schema.characters.id, characterId));
 
       res.status(204).send();
     } catch (error) {
