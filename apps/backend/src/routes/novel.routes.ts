@@ -467,17 +467,19 @@ router.delete(
   async (req: AuthRequest, res, next) => {
     try {
       const { novelId, characterId } = req.params;
+      const targetCharacterId = String(characterId).toLowerCase();
 
       const allCharacters = await db.query.characters.findMany({
         where: eq(schema.characters.novelId, novelId),
       });
 
       for (const char of allCharacters) {
-        if (char.id === characterId) continue;
+        const currentCharId = String(char.id).toLowerCase();
+        if (currentCharId === targetCharacterId) continue;
 
         if (char.relationships && char.relationships.length > 0) {
           const filteredRelationships = char.relationships.filter(
-            (r) => r.characterId !== characterId,
+            (r) => String(r.characterId).toLowerCase() !== targetCharacterId,
           );
 
           if (filteredRelationships.length !== char.relationships.length) {
